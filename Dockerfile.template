@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-traditional \
     curl \
     gettext \
+    gosu \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -50,17 +51,18 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 # Create app directory with proper structure
 WORKDIR /app
 RUN mkdir -p /app/{staticfiles,media,logs,persistent_media} && \
+    chmod 755 /app/{staticfiles,media,logs,persistent_media} && \
     chown -R app:app /app
 
 # Copy application code
 COPY --chown=app:app . /app/
 
 # Copy and set permissions for entrypoint
-COPY --chown=app:app ./docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --chown=root:root ./docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Security: Switch to non-root user
-USER app
+# Note: We stay as root for entrypoint, then switch to app user via gosu
+# This allows fixing volume permissions at runtime
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

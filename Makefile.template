@@ -32,24 +32,27 @@ coverage: ## Run tests with coverage
 	coverage report
 	coverage html
 
-# Code Quality
+# Code Quality (using modern tools)
 .PHONY: format
-format: ## Format code with black and isort
-	black .
-	isort .
+format: ## Format code with ruff
+	ruff format .
+	ruff check --fix .
 
 .PHONY: lint
-lint: ## Run linting checks
-	flake8 apps/
-	black --check .
-	isort --check-only .
+lint: ## Run linting checks with ruff
+	ruff check .
+	ruff format --check .
 
 .PHONY: type-check
 type-check: ## Run type checking with mypy
-	mypy apps/
+	mypy apps/ config/
+
+.PHONY: security
+security: ## Run security checks with bandit
+	bandit -r apps/ -c pyproject.toml
 
 .PHONY: quality
-quality: lint type-check ## Run all code quality checks
+quality: lint type-check security ## Run all code quality checks
 
 # Database Commands
 .PHONY: dbshell
@@ -103,13 +106,19 @@ restore: ## Restore database (requires DATE)
 
 # Initial Setup
 .PHONY: install
-install: ## Install dependencies
-	pip install -r requirements/development.txt
+install: ## Install dependencies (using uv for speed)
+	@command -v uv >/dev/null 2>&1 && uv pip install -r requirements/development.txt || pip install -r requirements/development.txt
+	@echo "💡 Tip: Install uv for 10-100x faster installs: pip install uv"
+
+.PHONY: install-uv
+install-uv: ## Install uv package manager
+	pip install uv
 
 .PHONY: setup
 setup: install migrate ## Initial project setup
 	python manage.py createsuperuser
-	@echo "Setup complete! Run 'make run' to start development server."
+	pre-commit install
+	@echo "✅ Setup complete! Run 'make run' to start development server."
 
 # Cleanup
 .PHONY: clean

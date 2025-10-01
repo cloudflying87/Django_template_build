@@ -397,9 +397,26 @@ class ProjectSetup:
                 {"PROJECT_NAME": self.answers['project_name']}
             )
         
-        # Copy pre-commit config
-        if (script_dir / "pre-commit-config.yaml.template").exists():
-            shutil.copy(script_dir / "pre-commit-config.yaml.template", self.project_dir / ".pre-commit-config.yaml")
+        # Copy pre-commit config (new ruff-based version)
+        if (script_dir / ".pre-commit-config.yaml.template").exists():
+            shutil.copy(script_dir / ".pre-commit-config.yaml.template", self.project_dir / ".pre-commit-config.yaml")
+
+        # Copy pyproject.toml for tool configuration
+        if (script_dir / "pyproject.toml.template").exists():
+            shutil.copy(script_dir / "pyproject.toml.template", self.project_dir / "pyproject.toml")
+
+        # Copy GitHub workflows
+        workflows_dir = self.project_dir / ".github" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        for workflow_file in ["ci.yml.template", "dependency-review.yml.template", "codeql.yml.template"]:
+            workflow_path = script_dir / ".github" / "workflows" / workflow_file
+            if workflow_path.exists():
+                output_name = workflow_file.replace(".template", "")
+                shutil.copy(workflow_path, workflows_dir / output_name)
+                # Replace PROJECT_NAME placeholder
+                workflow_content = (workflows_dir / output_name).read_text()
+                workflow_content = workflow_content.replace("{{PROJECT_NAME}}", self.answers['project_name'])
+                (workflows_dir / output_name).write_text(workflow_content)
         
         # Create Django settings templates
         self._create_django_settings(script_dir)
@@ -1032,7 +1049,7 @@ psycopg2-binary>=2.9.5
 python-decouple>=3.8
 Pillow>=10.0.0
 whitenoise>=6.6.0
-gunicorn>=21.2.0
+gunicorn[gevent]>=21.2.0
 """
         
         if self.answers['use_redis']:
@@ -1050,15 +1067,26 @@ gunicorn>=21.2.0
         (self.project_dir / "requirements" / "base.txt").write_text(base_requirements)
         
         dev_requirements = """-r base.txt
+# Development & debugging
 django-debug-toolbar>=4.2.0
 django-extensions>=3.2.0
-black>=23.0.0
-isort>=5.12.0
-flake8>=6.0.0
+
+# Code quality (modern tooling)
+ruff>=0.6.0
+mypy>=1.11.0
+django-stubs>=5.0.0
+bandit>=1.7.9
+
+# Testing
 pytest>=7.4.0
 pytest-django>=4.7.0
 pytest-cov>=4.1.0
+pytest-xdist>=3.6.0
 factory-boy>=3.3.0
+faker>=30.0.0
+
+# Pre-commit hooks
+pre-commit>=3.8.0
 """
         
         (self.project_dir / "requirements" / "development.txt").write_text(dev_requirements)
@@ -1479,42 +1507,53 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
    pyenv virtualenv {self.answers['python_version']} {self.answers['project_name']}
    cd . # Re-enter directory to activate environment
 
-2. Install and setup Django:
-   make install  # Install dependencies
+2. Install UV for blazing-fast dependency management (optional but recommended):
+   pip install uv
+   # UV is 10-100x faster than pip!
+
+3. Install dependencies:
+   make install-uv  # Install uv package manager
+   make install     # Install all dependencies (will use uv if available)
+
+4. Setup Django project:
    django-admin startproject config .
    python manage.py startapp core
    mv core apps/
 
-3. Configure Django settings:
+5. Configure Django settings:
    - Move settings.py to config/settings/base.py
    - Create development.py and production.py
    - Update INSTALLED_APPS to include 'apps.core'
 
-4. Initial setup:
-   make setup  # Runs migrations and creates superuser
+6. Initial setup (runs migrations, installs pre-commit hooks):
+   make setup  # One command does it all!
 
-5. Start development:
+7. Start development:
    make run  # Equivalent to python manage.py runserver
 
-6. Initialize git and code quality:
+8. Code quality automation:
+   make format      # Auto-format with ruff
+   make lint        # Check code quality
+   make type-check  # Type checking with mypy
+   make security    # Security scan with bandit
+   make quality     # Run all checks
+
+9. Initialize git and push:
    git add .
    git commit -m "Initial project setup"
-   pip install pre-commit
-   pre-commit install
-   pre-commit run --all-files  # Run on existing files
-
-7. Validate setup:
-   python validate_setup.py  # Check everything is working
-
-8. Available commands:
-   make help  # See all available commands
-
-9. Create GitHub/GitLab repository:
    git remote add origin git@github.com:username/{self.answers['project_name']}.git
    git push -u origin main
 
-10. Production deployment:
-    make deploy  # Uses build.sh script
+10. Enable GitHub Actions:
+    - CI workflow runs automatically on push/PR
+    - CodeQL security scanning
+    - Dependency review on PRs
+
+11. Production deployment:
+    make deploy  # Uses build.sh script with backup
+
+12. Validate setup:
+    python validate_setup.py  # Verify everything works
 """)
         
         print("\n📚 Documentation:")
@@ -1742,7 +1781,8 @@ When helping with this project:
             "nginx.conf.template",
             "nginx.Dockerfile.template",
             "Makefile.template",
-            "pre-commit-config.yaml.template",
+            ".pre-commit-config.yaml.template",
+            "pyproject.toml.template",
             "manifest.json.template",
             "service-worker.js.template",
             "Dockerfile.template",
@@ -1755,16 +1795,23 @@ When helping with this project:
             "validate_setup.py",
             "START_HERE.md",
             "COMPLETE_BEGINNERS_GUIDE.md",
-            "IMPROVEMENTS_SUMMARY.md"
+            "IMPROVEMENTS_SUMMARY.md",
+            "MODERN_TOOLS_GUIDE.md",
+            ".github"  # Directory
         ]
 
         removed_count = 0
         for file_name in files_to_remove:
             file_path = script_dir / file_name
             if file_path.exists():
-                file_path.unlink()
-                removed_count += 1
-                print(f"  ✅ Removed {file_name}")
+                if file_path.is_dir():
+                    shutil.rmtree(file_path)
+                    removed_count += 1
+                    print(f"  ✅ Removed directory {file_name}")
+                else:
+                    file_path.unlink()
+                    removed_count += 1
+                    print(f"  ✅ Removed {file_name}")
 
         if removed_count > 0:
             print(f"\n✅ Cleanup complete! Removed {removed_count} template files.")
