@@ -35,6 +35,13 @@ repos:
       - id: django-upgrade
         args: [--target-version, "5.0"]
 
+  # Django migration linting (catch unsafe migrations)
+  - repo: https://github.com/3YOURMIND/django-migration-linter
+    rev: v5.1.0
+    hooks:
+      - id: django-migration-linter
+        args: [--ignore-name-contains, migration, --database, default]
+
   # Security checks
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.9

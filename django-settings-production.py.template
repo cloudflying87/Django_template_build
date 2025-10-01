@@ -55,24 +55,49 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@{{DOMAIN_NAME}}')
 
-# Sentry error tracking (if configured)
+# Sentry error tracking with structlog integration (if configured)
 SENTRY_DSN = config('SENTRY_DSN', default=None)
 if SENTRY_DSN:
     import sentry_sdk
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
-    
+    import structlog
+
+    # Configure logging integration for Sentry
     sentry_logging = LoggingIntegration(
-        level=logging.INFO,
-        event_level=logging.ERROR
+        level=logging.INFO,        # Capture info and above as breadcrumbs
+        event_level=logging.ERROR  # Send errors and above as events
     )
-    
+
     sentry_sdk.init(
         dsn=SENTRY_DSN,
         integrations=[DjangoIntegration(), sentry_logging],
         traces_sample_rate=0.1,
         send_default_pii=True,
         environment=config('ENVIRONMENT', default='production'),
+        # Sentry automatically captures structlog context as extra data
+        before_send=lambda event, hint: event,  # Can add custom event processing here
+    )
+
+    # Add Sentry processor to structlog pipeline for production
+    # This sends structlog context to Sentry with each error
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        cache_logger_on_first_use=True,
     )
 
 # Database optimizations for production

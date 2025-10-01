@@ -651,6 +651,22 @@ cd ~/Cod<TAB>       # Press Tab after typing 'Cod', it will complete to 'Coding'
 
 Now we'll set up the actual project that will become your insurance tracker.
 
+### Understanding the Template Factory 🏭
+
+**Important concept:** This template works as a "factory" that creates new projects:
+
+```
+/Users/YourName/Coding/
+├── BuildTemplate/          ← The factory (stays here forever)
+│   ├── setup_new_project.py
+│   └── (template files)
+├── InsuranceTracker/       ← Created by the wizard
+├── AnotherProject/         ← You can create as many as you want
+└── ThirdProject/           ← All created from the same template
+```
+
+The BuildTemplate folder stays permanently in one place and creates new projects as siblings. You never modify the BuildTemplate - it's your reusable factory!
+
 ### Step 1: Navigate to Your Coding Folder
 
 ```bash
@@ -658,22 +674,22 @@ cd ~/Coding
 pwd                 # Verify you're in /Users/YourName/Coding
 ```
 
-### Step 2: Clone the Template from GitHub
+### Step 2: Clone the Template Factory from GitHub
 
-We'll download (clone) the Django template from GitHub:
+We'll download (clone) the template factory from GitHub:
 
 ```bash
-# Clone the template repository
-git clone https://github.com/cloudflying87/Django_template_build.git InsuranceTracker
+# Clone the template factory
+git clone https://github.com/cloudflying87/Django_template_build.git BuildTemplate
 
-# Go into your new project
-cd InsuranceTracker
+# Go into the template factory
+cd BuildTemplate
 ```
 
 **What just happened:**
-- `git clone` downloaded the entire template from GitHub
-- We named our local copy "InsuranceTracker"
-- The folder contains all the starter files we need
+- `git clone` downloaded the template factory from GitHub
+- We named it "BuildTemplate" (this stays permanent)
+- This folder contains the wizard that creates new projects
 
 **What is cloning?** Think of it like downloading a zip file, but better:
 - You get the entire project with all its history
@@ -683,20 +699,20 @@ cd InsuranceTracker
 **For advanced users with SSH keys:**
 If you have SSH keys set up with GitHub, you can use:
 ```bash
-git clone git@github.com:cloudflying87/Django_template_build.git InsuranceTracker
+git clone git@github.com:cloudflying87/Django_template_build.git BuildTemplate
 ```
 
 **Troubleshooting:**
 - If you get "command not found: git", go back to Step 3 in the installation section
 - If you get a permission error, make sure you're in a folder where you have write access (like ~/Coding)
 
-### Step 3: Open Project in VSCode
+### Step 3: Open BuildTemplate in VSCode
 
 ```bash
 code .
 ```
 
-**What this does**: Opens the current folder (`.` means "current folder") in VSCode.
+**What this does**: Opens the BuildTemplate folder (`.` means "current folder") in VSCode.
 
 **First time only**: If VSCode doesn't open, you may need to install the `code` command:
 1. Open VSCode manually
@@ -704,6 +720,8 @@ code .
 3. Type "shell command"
 4. Click "Shell Command: Install 'code' command in PATH"
 5. Try `code .` again
+
+**Note:** You're opening BuildTemplate to see the template files. Soon we'll run the wizard which will create your actual project in a new folder.
 
 ---
 
@@ -715,51 +733,73 @@ You now have everything set up and ready to go! There are **two ways** to procee
 
 **This is the fastest way to get a working Django project!**
 
-The template includes an interactive setup script (`setup_new_project.py`) that will:
+The BuildTemplate includes an interactive setup script (`setup_new_project.py`) that will:
 
 ✅ **Walk you through design choices** - Pick your colors, style preferences, and features
-✅ **Create a complete Django project** - Fully configured and ready to run
+✅ **Create a complete Django project** - In a NEW folder (your actual project)
 ✅ **Generate AI-ready documentation** - Custom files that help AI assistants understand your project
 ✅ **Set up build scripts** - Automated deployment tools pre-configured
 ✅ **Create custom CSS theme** - No Bootstrap/Tailwind - your own design system based on your choices
+✅ **Automatically open in VSCode** - Your new project opens in a new window
 
 **How it works:**
 
 The wizard will ask you friendly questions like:
+- What do you want to name your project? (e.g., "insurance-tracker")
 - What colors do you want for your project? (primary, secondary, accent)
 - What design style? (professional, modern, friendly, technical)
 - Do you want sharp corners or rounded edges?
 - Should it have dark mode support?
 - What special features do you need? (background tasks, caching, REST API)
 
-Then it **automatically generates everything**: settings files, documentation, CSS theme, build scripts, and more. You'll have a complete project structure in minutes, ready to start building features immediately with AI assistance.
+Then it **automatically generates everything** in a NEW sibling directory: settings files, documentation, CSS theme, build scripts, and more. You'll have a complete project structure in minutes, ready to start building features immediately with AI assistance.
 
 **To use the wizard:**
 
 ```bash
-# Make sure you're in the InsuranceTracker directory
-pwd    # Should show: /Users/YourName/Coding/InsuranceTracker
+# Make sure you're in the BuildTemplate directory
+pwd    # Should show: /Users/YourName/Coding/BuildTemplate
 
 # Run the setup wizard
 python3 setup_new_project.py
 ```
 
-**What happens next:**
+**What the wizard does:**
 
-1. The wizard asks you questions (takes 5-10 minutes)
-2. It shows you a summary of your choices
-3. You confirm, and it generates everything
-4. You get a `PROJECT_SETUP_SUMMARY.md` with all your configuration details
-5. Your project is ready - skip ahead to creating your Django app and models!
+When you run it, the wizard will:
+1. Ask you questions (takes 5-10 minutes)
+2. Show you a summary of your choices
+3. Ask for confirmation
+4. **Create your new project** in `/Users/YourName/Coding/InsuranceTracker/` (or whatever name you chose)
+5. Offer to open the new project in a VSCode window (press Enter to accept)
 
-**After using the wizard**, you'll have:
+**The result:**
+
+```
+/Users/YourName/Coding/
+├── BuildTemplate/          ← Still here, untouched (for future projects)
+└── InsuranceTracker/       ← Your NEW project (created by wizard)
+    ├── apps/
+    ├── config/
+    ├── docs/
+    ├── static/
+    ├── CLAUDE.md           ← Customized for your project
+    ├── PROJECT_SETUP_SUMMARY.md  ← Record of all your choices
+    ├── build.sh
+    └── ... (complete Django project structure)
+```
+
+**After using the wizard**, your InsuranceTracker project will have:
 - A `CLAUDE.md` file customized for your project (AI assistants read this to understand your project)
 - A `docs/` folder with complete guides
 - A CSS theme with your chosen colors in `static/css/base.css`
 - Pre-configured Docker files for production deployment
 - A `build.sh` script for easy deployment
+- A `PROJECT_SETUP_SUMMARY.md` with all your configuration details
 
-**Then you can start building immediately** by working with an AI assistant, creating your models, views, and templates!
+**Important:** The BuildTemplate folder stays untouched, so you can use it again to create more projects later!
+
+**Then you can start building immediately** by working with an AI assistant in your new InsuranceTracker project, creating your models, views, and templates!
 
 ---
 
@@ -789,7 +829,17 @@ It takes longer, but you'll deeply understand how everything works.
 
 ### Step 4: Explore the Project in VSCode
 
-In VSCode, you'll see a sidebar with folders. This is your project structure. Let me explain what each folder does:
+**📍 Where you should be now:**
+
+- **If you used Path A (Setup Wizard):**
+  - The wizard offered to open VSCode automatically - you should now see your new project (e.g., InsuranceTracker) open in a new VSCode window
+  - If you said "no" to the auto-open, run: `code ../InsuranceTracker` (or your project name)
+
+- **If you're following Path B (Manual Setup):**
+  - You should still be in the BuildTemplate folder
+  - You'll need to manually create your project structure (continue reading below)
+
+**For Path A users:** In VSCode, you'll see a sidebar with folders. This is your project structure. Let me explain what each folder does:
 
 ```
 InsuranceTracker/
@@ -2546,6 +2596,44 @@ You now have a fully functional Django project and the knowledge to keep buildin
 - Anything you can imagine!
 
 The skills you learned today transfer to any web project. Keep building, keep learning, and most importantly - have fun!
+
+---
+
+## 🏭 Creating More Projects
+
+**Remember:** You still have the BuildTemplate factory! You can create unlimited Django projects from it.
+
+### To Create Your Next Project:
+
+```bash
+# Navigate to BuildTemplate
+cd ~/Coding/BuildTemplate
+
+# Run the wizard again
+python3 setup_new_project.py
+
+# Answer the questions for your new project
+# (e.g., name it "recipe-manager", choose different colors, etc.)
+```
+
+The wizard will create another sibling project:
+
+```
+/Users/YourName/Coding/
+├── BuildTemplate/          ← The factory (still here!)
+├── InsuranceTracker/       ← Your first project
+└── RecipeManager/          ← Your new project
+```
+
+### Each Project is Independent
+
+- Different Python virtual environment
+- Different database
+- Different settings, colors, features
+- Different Git repository
+- All built from the same proven template
+
+**Tip:** Keep the BuildTemplate folder and never modify it. It's your reusable factory for all future Django projects!
 
 ---
 

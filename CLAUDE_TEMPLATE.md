@@ -148,18 +148,158 @@ python manage.py test
 ./build.sh -b -d $(date +%Y%m%d)
 ```
 
-### Code Quality
+### Code Quality (Modern Tooling)
 ```bash
-# Format and lint
-black .
-isort .
-flake8
+# Format and lint with ruff (10-100x faster than black+isort+flake8)
+make format      # Auto-format code
+make lint        # Check code quality
+make type-check  # Type checking with mypy
+make security    # Security scan with bandit
+make quality     # Run all checks
 
-# Type checking
-mypy apps/
+# Check migrations for unsafe operations
+make check-migrations
 
 # Test with coverage
 pytest --cov=apps
+
+# Run all pre-commit hooks manually
+pre-commit run --all-files
+```
+
+## Logging Best Practices
+
+**This project uses structlog for structured logging. Always use this pattern:**
+
+### Correct Logging Pattern
+```python
+import structlog
+
+logger = structlog.get_logger(__name__)
+
+# ✅ CORRECT - Structured logging with context
+logger.info("user_login_success", user_id=user.id, username=user.username, ip=request.META.get('REMOTE_ADDR'))
+logger.warning("payment_failed", user_id=user.id, amount=amount, reason="insufficient_funds")
+logger.error("database_connection_failed", host=db_host, port=db_port, exc_info=True)
+
+# ✅ Adding persistent context
+logger = logger.bind(user_id=user.id, request_id=request_id)
+logger.info("order_created", order_id=order.id)  # user_id and request_id auto-included
+
+# ✅ Exception logging
+try:
+    process_payment(order)
+except PaymentError as e:
+    logger.exception("payment_processing_error", order_id=order.id, amount=order.total)
+```
+
+### ❌ WRONG - Don't Do This
+```python
+# ❌ String formatting loses structure
+logger.info(f"User {user.username} logged in from {ip}")
+
+# ❌ No context data
+logger.info("Payment failed")
+
+# ❌ Old-style formatting
+logger.info("Order %s created by user %s", order.id, user.id)
+```
+
+### Why Structured Logging?
+- **Searchable**: Query logs by `user_id`, `order_id`, etc.
+- **Parseable**: JSON output for log aggregators (ELK, Datadog, etc.)
+- **Contextual**: Automatic request_id, user_id tracking
+- **Performant**: Faster than string formatting
+- **Debuggable**: See all related logs instantly
+
+### Log Levels
+- **DEBUG**: Detailed diagnostic info (dev only)
+- **INFO**: Important business events (`user_registered`, `order_completed`)
+- **WARNING**: Recoverable issues (`rate_limit_approached`, `cache_miss`)
+- **ERROR**: Errors that need attention (`payment_failed`, `email_send_error`)
+- **CRITICAL**: System failures (`database_down`, `out_of_memory`)
+
+### Viewing Logs
+```bash
+# Development: Colored console output
+make run
+
+# Production: JSON logs in logs/django.log
+tail -f logs/django.log | jq .  # Pretty-print JSON
+
+# Search logs
+grep "user_id.*12345" logs/django.log | jq .
+```
+
+## Health Checks & Monitoring
+
+### Health Check Endpoints
+The project includes django-health-check for monitoring:
+
+```python
+# Add to config/urls.py:
+from django.urls import path, include
+
+urlpatterns = [
+    # ... other patterns
+    path('health/', include('health_check.urls')),
+]
+```
+
+### Available Endpoints
+- `/health/` - Overall health status
+- `/health/?format=json` - JSON health status
+
+### Checks Included
+- **Database**: Connection and query test
+- **Cache**: Redis connectivity (if enabled)
+- **Storage**: Disk space and file system
+
+### Using Health Checks
+```bash
+# Check health (server must be running)
+make health
+
+# Or manually
+curl http://localhost:8000/health/
+```
+
+### Production Monitoring
+Use `/health/` for:
+- **Docker health checks** in docker-compose.yml
+- **Kubernetes liveness probes**
+- **Load balancer health monitoring**
+- **Uptime monitoring services** (UptimeRobot, Pingdom, etc.)
+
+## Modern Tools Included
+
+### Browser Auto-Reload (Development)
+- **Package**: django-browser-reload
+- **What it does**: Auto-refreshes browser when you save code
+- **Setup**: Already configured in development settings
+- **No action needed**: Just save your files and watch the magic!
+
+### Migration Safety
+- **Package**: django-migration-linter
+- **What it does**: Catches unsafe migration operations
+- **Prevents**: Adding non-nullable columns, dropping tables without backup, etc.
+- **Usage**: Runs automatically in pre-commit hooks
+- **Manual check**: `make check-migrations`
+
+### HTTP Client
+- **Package**: httpx
+- **Use for**: Making API calls (replaces requests)
+- **Benefits**: Async support, HTTP/2, connection pooling
+
+```python
+import httpx
+
+# Sync usage (like requests)
+response = httpx.get('https://api.example.com/data')
+
+# Async usage (in async views)
+async with httpx.AsyncClient() as client:
+    response = await client.get('https://api.example.com/data')
 ```
 
 ## Domain-Specific Context

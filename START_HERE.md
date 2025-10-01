@@ -1,61 +1,99 @@
-# 🚀 START HERE - Django Project Generator
+# 🚀 START HERE - Django Project Template Factory
 
-Welcome! This folder contains everything you need to create a new Django project with the same proven architecture as Keep-Logging.
+Welcome! This is a **template factory** that generates complete Django projects with the same proven architecture as Keep-Logging.
 
-## 📋 Quick Start (2 minutes)
+## 🏭 How It Works
 
-### Option A: Keep Templates for Reuse (Recommended)
+This template stays **permanently** in one location and creates new projects as siblings:
 
-1. **Clone/copy this template repository** somewhere permanent:
-   ```bash
-   git clone <repo-url> ~/django-templates
-   # or copy to: ~/django-templates
-   ```
+```
+/Users/yourname/Coding/
+├── BuildTemplate/          ← This stays here forever
+│   ├── setup_new_project.py
+│   └── (all template files)
+├── my-first-project/       ← Created by the wizard
+├── my-second-project/      ← Created by the wizard
+└── my-third-project/       ← Created by the wizard
+```
 
-2. **Run the setup wizard** from the templates directory:
-   ```bash
-   cd ~/django-templates
-   python setup_new_project.py
-   ```
+**Key concept**: The wizard creates your new project in the **parent directory** so BuildTemplate remains untouched for future use.
 
-3. **Answer the questions** - it will create a NEW directory for your project
+## 📋 Quick Start
 
-4. **Start developing** in your new project:
-   ```bash
-   cd ../your-project-name  # wherever you told it to create the project
-   python validate_setup.py  # Validate everything works
-   ```
+### Step 1: Run the Wizard (2 minutes)
 
-### Option B: One-Time Use
+```bash
+cd /path/to/BuildTemplate
+python setup_new_project.py
+```
 
-1. **Copy this folder** to your project location:
-   ```bash
-   cp -r /path/to/templates /path/to/your-workspace
-   cd /path/to/your-workspace
-   ```
+Answer the questions about:
+- Project name, colors, design style
+- Features you need (API, Celery, Redis, etc.)
+- Industry compliance requirements
 
-2. **Run the setup wizard**:
-   ```bash
-   python setup_new_project.py
-   ```
+The wizard creates your project in the parent directory and offers to open it in VSCode.
 
-3. **Answer the questions** and **accept cleanup** when offered
-   - This removes template files after creating your project
+### Step 2: Initial Django Setup (5 minutes)
 
-4. **Start developing**:
-   ```bash
-   # Create virtual environment
-   pyenv virtualenv 3.13.3 your-project-name
-   
-   # Install Django and create project
-   make install
-   django-admin startproject config .
-   python manage.py startapp core
-   mv core apps/
-   
-   # Run development server
-   make run
-   ```
+After the wizard completes, navigate to your new project:
+
+```bash
+cd ../your-project-name
+```
+
+**Create virtual environment:**
+```bash
+pyenv virtualenv 3.13.3 your-project-name
+cd .  # Re-enter directory to activate (thanks to .python-version file)
+```
+
+**Install dependencies:**
+```bash
+make install    # Uses UV if available (10-100x faster than pip)
+```
+
+**Create Django project:**
+```bash
+django-admin startproject config .
+python manage.py startapp core
+mv core apps/
+```
+
+**⚠️ IMPORTANT: Configure URLs**
+
+Open the generated `CONFIGURE_URLS.md` file and follow instructions to add:
+- Health check endpoints (`/health/`)
+- Browser auto-reload (`/__reload__/`)
+- Debug toolbar (`/__debug__/`)
+
+**Run initial setup:**
+```bash
+make setup      # Runs migrations, creates superuser, installs pre-commit hooks
+```
+
+**Start development:**
+```bash
+make run        # Django development server with auto-reload!
+```
+
+Visit http://localhost:8000/health/ to verify health checks are working.
+
+### Step 3: Start Building (ongoing)
+
+Your project is now ready with:
+- ✅ Structured logging (structlog)
+- ✅ Health check endpoints
+- ✅ Browser auto-reload
+- ✅ Modern code quality tools (ruff, mypy, bandit)
+- ✅ Custom CSS framework (your colors!)
+- ✅ Production-ready Docker setup
+
+**Key files to read:**
+- `CONFIGURE_URLS.md` - URL setup instructions (do this first!)
+- `PROJECT_SETUP_SUMMARY.md` - Your project configuration
+- `CLAUDE.md` - AI assistant context (logging patterns, best practices)
+- `docs/SETUP_GUIDE.md` - Complete setup documentation
 
 ## 🎯 What You'll Get
 
@@ -73,27 +111,35 @@ Welcome! This folder contains everything you need to create a new Django project
 - **Sentry**: Error tracking
 - **Custom theming**: Your brand colors
 
+### ✅ Modern Development Tools
+- **structlog**: Structured logging with JSON output
+- **django-health-check**: Health endpoints for monitoring
+- **django-browser-reload**: Auto-refresh on code changes
+- **django-migration-linter**: Catch unsafe migrations
+- **ruff**: Ultra-fast linting & formatting (10-100x faster)
+- **mypy**: Type checking for Python
+- **UV**: Blazing-fast package installation
+
 ### ✅ Documentation & Tools
-- **CLAUDE.md**: AI assistant context
+- **CLAUDE.md**: AI assistant context with logging best practices
+- **CONFIGURE_URLS.md**: URL setup instructions
 - **Style guides**: Complete CSS/coding standards
 - **Build scripts**: One-command deployment
-- **Pre-commit hooks**: Code quality automation
+- **Pre-commit hooks**: Automated code quality checks
 
 ## 🔧 Commands Reference
 
 ```bash
-# Initial setup
-python setup_new_project.py           # Run setup wizard
-python validate_setup.py              # Validate everything works
-python setup_new_project.py --cleanup # Remove template files after setup
+# Initial setup (run from BuildTemplate directory)
+python setup_new_project.py           # Run setup wizard to create new project
 
-# Development
+# Development (run from your NEW project directory)
 make run          # Start development server
 make test         # Run tests
 make shell        # Django shell
 make migrate      # Run migrations
 
-# Production
+# Production (run from your NEW project directory)
 make deploy       # Deploy with backup
 ./build.sh -r -d  # Full rebuild and deploy
 ```
@@ -103,7 +149,7 @@ make deploy       # Deploy with backup
 ### Same Architecture as Keep-Logging
 - ✅ Proven directory structure
 - ✅ Custom CSS component system
-- ✅ Delta Airlines-style theming (but with your colors)
+- ✅ Custom Colors
 - ✅ PWA-ready offline functionality
 - ✅ Security-hardened Docker setup
 
@@ -123,22 +169,21 @@ The wizard asks about your industry and adds appropriate:
 
 Once setup completes, you'll have:
 
-1. **PROJECT_SETUP_SUMMARY.md**: Complete record of your choices
+1. **PROJECT_SETUP_SUMMARY.md**: Complete record of your choices in your new project
 2. **Ready-to-code Django project**: Just add your models and views
 3. **Production deployment**: `make deploy` handles everything
 4. **AI-ready documentation**: CLAUDE.md has full context
 
-## 🧹 Cleanup
+## 🏭 Create More Projects
 
-**Only needed if you chose Option B (one-time use):**
+Want to create another project? Just run the wizard again:
 
-After confirming your project works, remove template files from where you ran the script:
 ```bash
-cd /path/to/templates  # where you originally ran setup
-python setup_new_project.py --cleanup
+cd /path/to/BuildTemplate
+python setup_new_project.py
 ```
 
-⚠️ **Warning**: This deletes template files. Don't run this if you want to create more projects!
+Each project will be created as a new sibling directory. The BuildTemplate folder stays intact!
 
 ## 🆘 Need Help?
 

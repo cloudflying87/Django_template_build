@@ -139,6 +139,15 @@ urls: ## Show all URL patterns
 check: ## Run Django system checks
 	python manage.py check --deploy
 
+.PHONY: health
+health: ## Check application health endpoints
+	@echo "Checking health endpoints..."
+	@curl -f http://localhost:8000/health/ || echo "❌ Health check failed (make sure server is running)"
+
+.PHONY: check-migrations
+check-migrations: ## Lint Django migrations for unsafe operations
+	python manage.py lintmigrations
+
 .PHONY: todo
 todo: ## Find all TODO comments
 	@grep -r "TODO" apps/ templates/ --exclude-dir=__pycache__ || echo "No TODOs found"
