@@ -1077,6 +1077,9 @@ mypy>=1.11.0
 django-stubs>=5.0.0
 bandit>=1.7.9
 
+# Template formatting (Django-aware HTML formatter)
+djhtml>=3.0.6
+
 # Testing
 pytest>=7.4.0
 pytest-django>=4.7.0
@@ -1797,6 +1800,8 @@ When helping with this project:
             "COMPLETE_BEGINNERS_GUIDE.md",
             "IMPROVEMENTS_SUMMARY.md",
             "MODERN_TOOLS_GUIDE.md",
+            "DJANGO_TEMPLATES_FORMATTING.md",
+            "UPGRADE_SUMMARY.md",
             ".github"  # Directory
         ]
 

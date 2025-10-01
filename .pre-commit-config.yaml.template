@@ -10,8 +10,12 @@ repos:
       # Run the linter
       - id: ruff
         args: [--fix]
+        types: [python]  # Explicitly only Python files
+        exclude: ^(templates/|.*\.html$|.*\.jinja$|.*\.jinja2$)
       # Run the formatter
       - id: ruff-format
+        types: [python]  # Explicitly only Python files
+        exclude: ^(templates/|.*\.html$|.*\.jinja$|.*\.jinja2$)
 
   # Type checking with mypy
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -55,13 +59,14 @@ repos:
       - id: debug-statements
       - id: detect-private-key
 
-  # Check for Django template issues
+  # Django template formatting (ONLY tool that should touch .html files!)
   - repo: https://github.com/rtts/djhtml
     rev: 3.0.6
     hooks:
       - id: djhtml
         args: [--tabwidth, "2"]
-        files: \.(html|jinja)$
+        files: \.(html|jinja|jinja2)$
+        types: [html]
 
   # YAML formatting
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
