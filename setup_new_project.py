@@ -256,6 +256,9 @@ It's excluded from git via .gitignore.
         print("\n⚙️  Advanced Setup Mode")
         print("=" * 50)
 
+        # Collect basic project info first (needed for domain-based defaults)
+        self.collect_project_info()
+
         # Ask about authentication first
         print("\n👤 Authentication System")
         print("-" * 30)
