@@ -119,23 +119,29 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
+    path('', include('apps.core.urls')),  # Homepage and core views
     path('admin/', admin.site.urls),
     path('health/', include('health_check.urls')),
-    path('accounts/', include('apps.accounts.urls')),
 ]
+
+# Add accounts URLs if the app exists
+try:
+    urlpatterns.append(path('accounts/', include('apps.accounts.urls')))
+except ImportError:
+    pass
 
 # Serve media files in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
-    # Add browser auto-reload
+    # Add browser auto-reload (if installed)
     try:
         urlpatterns += [path('__reload__/', include('django_browser_reload.urls'))]
-    except Exception:
+    except ImportError:
         pass
 
-    # Add debug toolbar
+    # Add debug toolbar (if installed)
     try:
         import debug_toolbar
         urlpatterns = [path('__debug__/', include(debug_toolbar.urls))] + urlpatterns
@@ -171,6 +177,168 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
 application = get_asgi_application()
 '''
             (config_dir / "asgi.py").write_text(asgi_content.format(project_name=self.project_name))
+
+    def _create_core_homepage(self):
+        """Create homepage view, URLs, and template for core app."""
+        core_dir = self.project_dir / "apps" / "core"
+
+        # Create core URLs
+        core_urls_content = '''"""
+Core app URL configuration.
+"""
+from django.urls import path
+from . import views
+
+app_name = 'core'
+
+urlpatterns = [
+    path('', views.home, name='home'),
+]
+'''
+        (core_dir / "urls.py").write_text(core_urls_content)
+
+        # Create home view
+        views_content = '''"""
+Core app views.
+"""
+from django.shortcuts import render
+
+
+def home(request):
+    """Homepage view."""
+    context = {
+        'project_name': '{project_name}',
+    }
+    return render(request, 'core/home.html', context)
+'''
+        (core_dir / "views.py").write_text(views_content.format(project_name=self.project_name))
+
+        # Create templates directory and home template
+        templates_dir = core_dir / "templates" / "core"
+        templates_dir.mkdir(parents=True, exist_ok=True)
+
+        home_template_content = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project_name }} - Ready!</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+        }}
+
+        .container {{
+            text-align: center;
+            max-width: 600px;
+        }}
+
+        h1 {{
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            animation: fadeInUp 0.6s ease-out;
+        }}
+
+        .emoji {{
+            font-size: 5rem;
+            margin-bottom: 2rem;
+            animation: bounce 1s ease-in-out infinite;
+        }}
+
+        p {{
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+            animation: fadeInUp 0.6s ease-out 0.2s both;
+        }}
+
+        .info {{
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-top: 2rem;
+            animation: fadeInUp 0.6s ease-out 0.4s both;
+        }}
+
+        .info h2 {{
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            opacity: 0.9;
+        }}
+
+        .links {{
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1.5rem;
+        }}
+
+        .links a {{
+            color: white;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }}
+
+        .links a:hover {{
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }}
+
+        @keyframes fadeInUp {{
+            from {{
+                opacity: 0;
+                transform: translateY(20px);
+            }}
+            to {{
+                opacity: 1;
+                transform: translateY(0);
+            }}
+        }}
+
+        @keyframes bounce {{
+            0%, 100% {{ transform: translateY(0); }}
+            50% {{ transform: translateY(-20px); }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="emoji">🎉</div>
+        <h1>You Made It!</h1>
+        <p>{{ project_name }} is up and running</p>
+
+        <div class="info">
+            <h2>Now Start Programming</h2>
+            <div class="links">
+                <a href="/admin/">Admin Panel</a>
+                <a href="/health/">Health Check</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+'''
+        (templates_dir / "home.html").write_text(home_template_content)
+        print("✅ Created homepage at /")
 
     def create_pyenv(self):
         """Create and activate Python environment."""
@@ -279,6 +447,7 @@ application = get_asgi_application()
             print("✅ Django settings found, creating Django files...")
             self._create_manage_py()
             self._create_missing_config_files()
+            self._create_core_homepage()
             print("✅ Django project configured with pre-existing settings")
             return True
 
@@ -333,6 +502,9 @@ application = get_asgi_application()
             # Update manage.py to explicitly use development settings
             self._create_manage_py()
             print("✅ Updated manage.py to use config.settings.development")
+
+            # Create homepage
+            self._create_core_homepage()
 
             print("\n✅ Django project created!")
             print("   Using pre-configured settings in config/settings/")
@@ -425,8 +597,9 @@ application = get_asgi_application()
    python manage.py createsuperuser
 
 🌐 Access Your Site:
-   - Frontend: http://localhost:8000
+   - Homepage: http://localhost:8000 (You made it! 🎉)
    - Admin: http://localhost:8000/admin
+   - Health: http://localhost:8000/health
 
 📚 Documentation:
    - Quick reference: NEXT_STEPS.md
@@ -438,7 +611,6 @@ application = get_asgi_application()
    Once you're up and running, you can delete:
    - continue_here.py (this script)
    - NEXT_STEPS.md (the guide)
-   - CONFIGURE_URLS.md (after adding URLs)
 
 Happy coding! 🎉
 """)
