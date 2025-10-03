@@ -428,6 +428,25 @@ brew install --cask visual-studio-code
 
 **Verify**: Open VSCode by pressing `Command + Space`, typing "Visual Studio Code", and pressing Enter.
 
+**IMPORTANT: Enable the `code` command**
+
+After installing VSCode, you need to enable the `code` command so you can open folders from the terminal:
+
+1. **Open VSCode** (if not already open)
+2. Press **`Command + Shift + P`** (this opens the Command Palette)
+3. Type: **"shell command"**
+4. Click: **"Shell Command: Install 'code' command in PATH"**
+5. You'll see a confirmation: "Shell command 'code' successfully installed"
+
+**Test it:**
+```bash
+code --version
+```
+
+You should see VSCode version information.
+
+**What this does:** Now you can open any folder in VSCode from terminal with `code .` or `code foldername`. This is essential for the Django setup wizard!
+
 ### Step 5: Install pyenv
 
 **In Terminal:**

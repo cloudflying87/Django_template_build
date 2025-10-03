@@ -8,6 +8,7 @@ import os
 import sys
 import re
 import shutil
+import json
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -17,42 +18,156 @@ class ProjectSetup:
     def __init__(self):
         self.answers = {}
         self.project_dir = None  # Will be set after getting project name
-        
+        self.resuming = False  # Track if we're resuming from previous run
+
+        # Create temp directory for wizard files
+        self.temp_dir = Path.cwd() / ".wizard_temp"
+        self.temp_dir.mkdir(exist_ok=True)
+
+        # Create README in temp directory to explain its purpose
+        readme_path = self.temp_dir / "README.txt"
+        if not readme_path.exists():
+            readme_path.write_text("""
+This directory contains temporary files created by the Django project setup wizard.
+
+What's stored here:
+- Progress files (progress_*.json) - Your answers saved during wizard runs
+- These files allow you to resume setup if something fails
+
+This directory is automatically cleaned up when setup completes successfully.
+
+If you see old files here, you can safely delete this entire directory.
+It's excluded from git via .gitignore.
+""".strip())
+
+        # Save progress in temp directory with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.save_file = self.temp_dir / f"progress_{timestamp}.json"
+
+        # Try to load previous answers if they exist
+        self.load_progress()
+
     def run(self):
         """Run the complete setup process."""
-        print("🚀 Django Project Setup Wizard")
-        print("=" * 50)
-        print("This wizard will help you set up a new Django project")
-        print("with custom styling, build scripts, and documentation.\n")
+        # Only show header and ask questions if not resuming
+        if not self.resuming:
+            print("🚀 Django Project Setup Wizard")
+            print("=" * 50)
+            print("This wizard will help you set up a new Django project")
+            print("with custom styling, build scripts, and documentation.\n")
 
-        # Ask setup mode
-        setup_mode = self.ask_setup_mode()
+            # Ask setup mode
+            setup_mode = self.ask_setup_mode()
 
-        if setup_mode == 'quick':
-            self.run_quick_setup()
+            if setup_mode == 'quick':
+                self.run_quick_setup()
+            else:
+                self.run_advanced_setup()
+
+            # Show summary
+            self.show_summary()
         else:
-            self.run_advanced_setup()
-
-        # Show summary
-        self.show_summary()
+            # Resuming - show brief summary
+            print("\n" + "=" * 50)
+            print("📊 Resuming Setup")
+            print("=" * 50)
+            print(f"\nProject: {self.answers.get('project_name', 'Unknown')}")
+            print(f"Description: {self.answers.get('project_description', 'N/A')}")
+            print(f"Domain: {self.answers.get('domain', 'N/A')}")
 
         # Confirm and create
         if self.confirm_setup():
-            self.create_project_structure()
-            self.generate_env_file()  # Generate .env with secrets
-            self.fill_templates()
-            self.generate_css()
-            self.create_django_project()
+            try:
+                self.create_project_structure()
+                self.generate_env_file()  # Generate .env with secrets
+                self.fill_templates()
+                self.generate_css()
+                self.create_django_project()
 
-            # Generate auth system if requested (default: yes in quick, optional in advanced)
-            if self.answers.get('include_auth', True):
-                self.generate_auth_system()
+                # Generate auth system if requested (default: yes in quick, optional in advanced)
+                if self.answers.get('include_auth', True):
+                    self.generate_auth_system()
 
-            self.generate_summary_file()
-            self.show_next_steps()
-            self.offer_open_vscode()
+                self.generate_summary_file()
+                self.generate_continue_files()  # Generate continuation script and guide
+                self.show_next_steps()
+                self.offer_open_vscode()
+
+                # Clean up temp directory on successful completion
+                self.cleanup_temp_files()
+                print("\n✨ Wizard temp files cleaned up")
+
+            except Exception as e:
+                print(f"\n❌ Error during setup: {e}")
+                print(f"\n💾 Your answers have been saved to: {self.save_file}")
+                print("   You can run the script again to resume from where you left off.")
+                raise  # Re-raise to show full traceback
         else:
             print("\n❌ Setup cancelled.")
+
+    def save_progress(self):
+        """Save current answers to recover from crashes."""
+        try:
+            with open(self.save_file, 'w') as f:
+                json.dump(self.answers, f, indent=2)
+        except Exception as e:
+            # Don't fail the whole script if we can't save
+            print(f"  ⚠️  Warning: Could not save progress: {e}")
+
+    def load_progress(self):
+        """Load previous answers if available."""
+        # Check for any progress files in temp directory
+        if self.temp_dir.exists():
+            progress_files = sorted(self.temp_dir.glob("progress_*.json"), reverse=True)
+
+            if progress_files:
+                # Use most recent progress file
+                latest_progress = progress_files[0]
+
+                try:
+                    with open(latest_progress, 'r') as f:
+                        saved_answers = json.load(f)
+
+                    print("\n💾 Found previous setup in progress!")
+                    print(f"   Project: {saved_answers.get('project_name', 'Unknown')}")
+                    print(f"   Saved: {latest_progress.name}")
+
+                    resume = input("\n   Resume previous setup? (Y/n): ").lower()
+                    if resume != 'n':
+                        self.answers = saved_answers
+                        if 'project_name' in self.answers:
+                            self.project_dir = Path.cwd().parent / self.answers['project_name']
+                        self.save_file = latest_progress  # Use existing file
+                        self.resuming = True  # Mark as resuming
+                        print("   ✓ Resumed previous setup")
+                        print("   ⏩ Skipping questions, going directly to project creation...")
+                    else:
+                        # Start fresh - clean up old progress files
+                        self.cleanup_temp_files()
+                        print("   ✓ Starting fresh setup")
+
+                except Exception as e:
+                    print(f"  ⚠️  Warning: Could not load previous progress: {e}")
+                    print("   Starting fresh setup")
+
+    def cleanup_temp_files(self):
+        """Clean up temporary wizard files."""
+        try:
+            if self.temp_dir.exists():
+                # Remove all progress files
+                for file in self.temp_dir.glob("progress_*.json"):
+                    file.unlink()
+
+                # Check if only README remains
+                remaining_files = list(self.temp_dir.glob("*"))
+                if len(remaining_files) <= 1 and all(f.name == "README.txt" for f in remaining_files):
+                    # Clean up everything including README
+                    for file in remaining_files:
+                        file.unlink()
+                    self.temp_dir.rmdir()
+
+        except Exception as e:
+            print(f"  ⚠️  Warning: Could not clean up temp files: {e}")
 
     def ask_setup_mode(self) -> str:
         """Ask user for setup mode."""
@@ -116,11 +231,11 @@ class ProjectSetup:
         # Optional: Share image
         self._quick_share_image_prompt()
 
-        # Technical defaults
-        self.answers['python_version'] = '3.11.8'
-        self.answers['dev_database'] = 'postgresql'  # Always PostgreSQL
+        # Technical defaults (optimized for quick start)
+        self.answers['python_version'] = '3.13.1'
+        self.answers['dev_database'] = 'sqlite'  # SQLite for simplicity
         self.answers['use_celery'] = False
-        self.answers['use_redis'] = True  # Good default for caching
+        self.answers['use_redis'] = False  # Keep it simple for quick start
         self.answers['use_api'] = True  # Hybrid includes API
         self.answers['use_sentry'] = False
         self.answers['use_cloudflare'] = False
@@ -130,6 +245,9 @@ class ProjectSetup:
         # Domain specifics
         self.answers['compliance_reqs'] = self._get_default_compliance()
         self.answers['special_features'] = ''
+
+        # Save progress
+        self.save_progress()
 
         print("\n✓ Quick setup complete with smart defaults!")
 
@@ -161,6 +279,9 @@ class ProjectSetup:
         self.collect_style_preferences()
         self.collect_technical_choices()
         self.collect_domain_specific()
+
+        # Save progress after all answers collected
+        self.save_progress()
 
     def _quick_share_image_prompt(self):
         """Quick prompt for share image."""
@@ -346,7 +467,7 @@ class ProjectSetup:
         print("-" * 30)
         
         # Python version
-        default_python = "3.11.8"
+        default_python = "3.13.1"
         python_version = input(f"Python version [{default_python}]: ").strip()
         self.answers['python_version'] = python_version or default_python
         
@@ -511,7 +632,10 @@ class ProjectSetup:
     def confirm_setup(self) -> bool:
         """Confirm the setup configuration."""
         print("\n" + "=" * 50)
-        return input("Proceed with setup? (Y/n): ").lower() != 'n'
+        if self.resuming:
+            return input("Continue creating project? (Y/n): ").lower() != 'n'
+        else:
+            return input("Proceed with setup? (Y/n): ").lower() != 'n'
     
     def create_project_structure(self):
         """Create the project directory structure."""
@@ -520,6 +644,7 @@ class ProjectSetup:
         directories = [
             "apps/core/templates/core/includes",
             "apps/core/management/commands",
+            "apps/core/migrations",
             "apps/core/static/css",
             "apps/core/static/js",
             "config/settings",
@@ -574,7 +699,7 @@ class ProjectSetup:
         
         # Copy and fill CLAUDE.md
         self._process_template(
-            script_dir / "CLAUDE_TEMPLATE.md",
+            script_dir / "templates" / "CLAUDE_TEMPLATE.md",
             self.project_dir / "CLAUDE.md",
             {
                 "[YOUR PROJECT NAME]": self.answers['project_name'],
@@ -592,14 +717,23 @@ class ProjectSetup:
         )
         
         # Copy other templates
-        shutil.copy(script_dir / "STYLE_GUIDE_TEMPLATE.md", self.project_dir / "docs" / "STYLE_GUIDE.md")
-        shutil.copy(script_dir / "CODING_GUIDE_TEMPLATE.md", self.project_dir / "docs" / "CODING_GUIDE.md")
-        shutil.copy(script_dir / "DJANGO_PROJECT_STARTER_GUIDE.md", self.project_dir / "docs" / "SETUP_GUIDE.md")
+        # Copy documentation files (with error handling)
+        docs_to_copy = [
+            ("STYLE_GUIDE_TEMPLATE.md", "STYLE_GUIDE.md"),
+            ("CODING_GUIDE_TEMPLATE.md", "CODING_GUIDE.md"),
+            ("COMPLETE_BEGINNERS_GUIDE.md", "BEGINNERS_GUIDE.md"),
+        ]
 
-        # Copy beginner's guide if it exists
-        if (script_dir / "COMPLETE_BEGINNERS_GUIDE.md").exists():
-            shutil.copy(script_dir / "COMPLETE_BEGINNERS_GUIDE.md", self.project_dir / "docs" / "BEGINNERS_GUIDE.md")
-            print("  ✅ Copied beginner's guide")
+        for source_file, dest_file in docs_to_copy:
+            source_path = script_dir / "templates" / source_file
+            if source_path.exists():
+                try:
+                    shutil.copy(source_path, self.project_dir / "docs" / dest_file)
+                    print(f"  ✅ Copied {dest_file}")
+                except Exception as e:
+                    print(f"  ⚠️  Warning: Could not copy {source_file}: {e}")
+            else:
+                print(f"  ⚠️  Warning: {source_file} not found (skipping)")
 
         # Generate file handling guide
         self._generate_file_handling_guide()
@@ -609,32 +743,32 @@ class ProjectSetup:
             self._generate_auth_guide()
 
         # Copy nginx configuration
-        if (script_dir / "nginx.conf.template").exists():
-            shutil.copy(script_dir / "nginx.conf.template", self.project_dir / "nginx" / "nginx.conf")
-        if (script_dir / "nginx.Dockerfile.template").exists():
-            shutil.copy(script_dir / "nginx.Dockerfile.template", self.project_dir / "nginx" / "Dockerfile")
-        
+        if (script_dir / "templates" / "docker" / "nginx.conf.template").exists():
+            shutil.copy(script_dir / "templates" / "docker" / "nginx.conf.template", self.project_dir / "nginx" / "nginx.conf")
+        if (script_dir / "templates" / "docker" / "nginx.Dockerfile.template").exists():
+            shutil.copy(script_dir / "templates" / "docker" / "nginx.Dockerfile.template", self.project_dir / "nginx" / "Dockerfile")
+
         # Copy Makefile
-        if (script_dir / "Makefile.template").exists():
+        if (script_dir / "templates" / "config" / "Makefile.template").exists():
             self._process_template(
-                script_dir / "Makefile.template",
+                script_dir / "templates" / "config" / "Makefile.template",
                 self.project_dir / "Makefile",
                 {"PROJECT_NAME": self.answers['project_name']}
             )
-        
+
         # Copy pre-commit config (new ruff-based version)
-        if (script_dir / ".pre-commit-config.yaml.template").exists():
-            shutil.copy(script_dir / ".pre-commit-config.yaml.template", self.project_dir / ".pre-commit-config.yaml")
+        if (script_dir / "templates" / "config" / ".pre-commit-config.yaml.template").exists():
+            shutil.copy(script_dir / "templates" / "config" / ".pre-commit-config.yaml.template", self.project_dir / ".pre-commit-config.yaml")
 
         # Copy pyproject.toml for tool configuration
-        if (script_dir / "pyproject.toml.template").exists():
-            shutil.copy(script_dir / "pyproject.toml.template", self.project_dir / "pyproject.toml")
+        if (script_dir / "templates" / "config" / "pyproject.toml.template").exists():
+            shutil.copy(script_dir / "templates" / "config" / "pyproject.toml.template", self.project_dir / "pyproject.toml")
 
         # Copy GitHub workflows
         workflows_dir = self.project_dir / ".github" / "workflows"
         workflows_dir.mkdir(parents=True, exist_ok=True)
         for workflow_file in ["ci.yml.template", "dependency-review.yml.template", "codeql.yml.template"]:
-            workflow_path = script_dir / ".github" / "workflows" / workflow_file
+            workflow_path = script_dir / "templates" / ".github" / "workflows" / workflow_file
             if workflow_path.exists():
                 output_name = workflow_file.replace(".template", "")
                 shutil.copy(workflow_path, workflows_dir / output_name)
@@ -670,7 +804,7 @@ class ProjectSetup:
         
         settings_dir = self.project_dir / "config" / "settings"
         settings_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create __init__.py files
         (self.project_dir / "config" / "__init__.py").touch()
         (settings_dir / "__init__.py").touch()
@@ -689,9 +823,9 @@ class ProjectSetup:
             ('django-settings-development.py.template', 'development.py'),
             ('django-settings-production.py.template', 'production.py'),
         ]
-        
+
         for template_name, output_name in settings_templates:
-            template_path = script_dir / template_name
+            template_path = script_dir / "templates" / "config" / "settings" / template_name
             if template_path.exists():
                 self._process_template(
                     template_path,
@@ -701,7 +835,106 @@ class ProjectSetup:
                 print(f"  ✅ Created {output_name}")
             else:
                 print(f"  ⚠️  Template {template_name} not found")
-    
+
+        # Create config/urls.py
+        self._create_urls_py()
+
+        # Create config/wsgi.py
+        self._create_wsgi_py()
+
+        # Create config/asgi.py
+        self._create_asgi_py()
+
+    def _create_urls_py(self):
+        """Create the main URL configuration."""
+        config_dir = self.project_dir / "config"
+
+        urls_content = f'''"""
+URL configuration for {self.answers['project_name']} project.
+"""
+from django.contrib import admin
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+'''
+
+        # Add health check URLs if configured
+        urls_content += "    path('health/', include('health_check.urls')),\n"
+
+        # Add accounts URLs if authentication is included
+        # (API URLs are included within apps.accounts.urls)
+        if self.answers.get('include_auth', True):
+            urls_content += "    path('accounts/', include('apps.accounts.urls')),\n"
+
+        # Close urlpatterns and add static files
+        urls_content += ''']
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+    # Add debug toolbar
+    try:
+        import debug_toolbar
+        urlpatterns = [path('__debug__/', include(debug_toolbar.urls))] + urlpatterns
+    except ImportError:
+        pass
+'''
+        (config_dir / "urls.py").write_text(urls_content)
+        print("  ✅ Created urls.py")
+
+    def _create_wsgi_py(self):
+        """Create WSGI configuration."""
+        config_dir = self.project_dir / "config"
+
+        wsgi_content = f'''"""
+WSGI config for {self.answers['project_name']} project.
+
+It exposes the WSGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/5.0/howto/deployment/wsgi/
+"""
+
+import os
+
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
+
+application = get_wsgi_application()
+'''
+        (config_dir / "wsgi.py").write_text(wsgi_content)
+        print("  ✅ Created wsgi.py")
+
+    def _create_asgi_py(self):
+        """Create ASGI configuration."""
+        config_dir = self.project_dir / "config"
+
+        asgi_content = f'''"""
+ASGI config for {self.answers['project_name']} project.
+
+It exposes the ASGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/5.0/howto/deployment/asgi/
+"""
+
+import os
+
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.production')
+
+application = get_asgi_application()
+'''
+        (config_dir / "asgi.py").write_text(asgi_content)
+        print("  ✅ Created asgi.py")
+
     def _process_template(self, source: Path, destination: Path, replacements: Dict[str, str]):
         """Process a template file with replacements."""
         content = source.read_text()
@@ -1677,11 +1910,16 @@ Before deploying:
         print("\n📱 Generating PWA files...")
 
 
-        # Determine the image filename
+        # Determine the image filename and type
         if self.answers.get('share_image_ext'):
             share_image = f"/static/img/default-share{self.answers['share_image_ext']}"
+            image_ext = self.answers['share_image_ext'].lstrip('.')
         else:
             share_image = "/static/img/default-share.jpg"
+            image_ext = "jpg"
+
+        # Convert jpg to jpeg for mime type
+        image_type = image_ext.replace('jpg', 'jpeg')
 
         # Generate manifest.json
         manifest = {
@@ -1696,7 +1934,7 @@ Before deploying:
                 {
                     "src": share_image,
                     "sizes": "512x512",
-                    "type": f"image/{self.answers.get('share_image_ext', '.jpg').lstrip('.').replace('jpg', 'jpeg')}"
+                    "type": f"image/{image_type}"
                 }
             ]
         }
@@ -1754,16 +1992,16 @@ self.addEventListener('fetch', (event) => {
     <!-- Open Graph with defaults -->
     <meta property="og:title" content="{{% block og_title %}}{self.answers['project_name'].title()}{{% endblock %}}">
     <meta property="og:description" content="{{% block og_description %}}{self.answers['project_description']}{{% endblock %}}">
-    <meta property="og:image" content="{{% block og_image %}}{{{{ request.scheme }}}}://{{{{ request.get_host }}}}{{% static 'img/default-share{self.answers.get('share_image_ext', '.jpg')}' %}}{{% endblock %}}">
+    <meta property="og:image" content="{{% block og_image %}}{{{{ request.scheme }}}}://{{{{ request.get_host }}}}{{% static 'img/default-share{self.answers.get('share_image_ext') or '.jpg'}' %}}{{% endblock %}}">
     <meta property="og:url" content="{{{{ request.build_absolute_uri }}}}">
     <meta property="og:type" content="website">
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:image" content="{{% block twitter_image %}}{{{{ request.scheme }}}}://{{{{ request.get_host }}}}{{% static 'img/default-share{self.answers.get('share_image_ext', '.jpg')}' %}}{{% endblock %}}">
+    <meta name="twitter:image" content="{{% block twitter_image %}}{{{{ request.scheme }}}}://{{{{ request.get_host }}}}{{% static 'img/default-share{self.answers.get('share_image_ext') or '.jpg'}' %}}{{% endblock %}}">
 
     <!-- Apple Touch Icon -->
-    <link rel="apple-touch-icon" href="{{% static 'img/default-share{self.answers.get('share_image_ext', '.jpg')}' %}}">
+    <link rel="apple-touch-icon" href="{{% static 'img/default-share{self.answers.get('share_image_ext') or '.jpg'}' %}}">
 </head>
 ```
 
@@ -2417,6 +2655,11 @@ DOMAIN_NAME={self.answers.get('domain_name', 'example.com')}
         accounts_dir.mkdir(parents=True, exist_ok=True)
         (accounts_dir / "__init__.py").touch()
 
+        # Create migrations folder
+        migrations_dir = accounts_dir / "migrations"
+        migrations_dir.mkdir(exist_ok=True)
+        (migrations_dir / "__init__.py").touch()
+
         # Determine login field
         login_method = self.answers.get('login_method', 'email')
         use_email_login = login_method in ['email', 'both']
@@ -2482,7 +2725,7 @@ class User(AbstractUser):
 
     # Set login field
     USERNAME_FIELD = '{username_field}'
-    '''
+'''
 
         if login_method == 'email':
             models_content += "    REQUIRED_FIELDS = ['username']  # For createsuperuser command\n"
@@ -2908,14 +3151,9 @@ from django.contrib.auth import views as auth_views
     def create_django_project(self):
         """Create initial Django project files."""
         print("\n🏗️  Creating Django project files...")
-        
+
         # Get the directory where this script is located
         script_dir = Path(__file__).parent
-        
-        # Initialize git repository
-        print("\n🔧 Initializing git repository...")
-        os.system("git init")
-        os.system("git branch -M main")  # Use 'main' as default branch
         
         # Create requirements files
         base_requirements = """Django>=5.0,<5.1
@@ -3065,19 +3303,19 @@ cloudflared/*.pem
         
         # Create docker-compose.yml from template
         self._process_docker_template(
-            script_dir / "docker-compose.yml.template",
+            script_dir / "templates" / "docker" / "docker-compose.yml.template",
             self.project_dir / "docker-compose.yml"
         )
-        
+
         # Create Dockerfile from template
         self._process_docker_template(
-            script_dir / "Dockerfile.template",
+            script_dir / "templates" / "docker" / "Dockerfile.template",
             self.project_dir / "Dockerfile"
         )
-        
+
         # Create enhanced docker-entrypoint.sh
         self._process_docker_template(
-            script_dir / "docker-entrypoint.sh.template",
+            script_dir / "templates" / "docker" / "docker-entrypoint.sh.template",
             self.project_dir / "docker-entrypoint.sh"
         )
         os.chmod(self.project_dir / "docker-entrypoint.sh", 0o755)
@@ -3085,31 +3323,14 @@ cloudflared/*.pem
         # Setup Cloudflare if requested
         if self.answers.get('use_cloudflare'):
             self._setup_cloudflare_tunnel(script_dir)
-        
-        # Create initial README
-        readme_content = f"""# {self.answers['project_name'].title().replace('-', ' ')}
 
-{self.answers['project_description']}
-
-## Quick Start
-
-See `docs/SETUP_GUIDE.md` for complete setup instructions.
-
-```bash
-# Development
-make run
-
-# Production
-make deploy
-```
-
-## Documentation
-
-- Project Overview: `CLAUDE.md`
-- Setup Guide: `docs/SETUP_GUIDE.md`
-- Style Guide: `docs/STYLE_GUIDE.md`
-- Coding Standards: `docs/CODING_GUIDE.md`
-"""
+        # Create initial README from template
+        readme_template = (script_dir / "templates" / "README.md").read_text()
+        readme_content = readme_template.replace(
+            '{project_name_title}', self.answers['project_name'].title().replace('-', ' ')
+        ).replace(
+            '{project_description}', self.answers['project_description']
+        )
         (self.project_dir / "README.md").write_text(readme_content)
         
         print("✅ Django project files created")
@@ -3180,7 +3401,7 @@ make deploy
         cloudflared_dir.mkdir(exist_ok=True)
         
         # Copy and process config template
-        config_template = script_dir / "cloudflared-config.yml.template"
+        config_template = script_dir / "templates" / "config" / "cloudflared-config.yml.template"
         if config_template.exists():
             self._process_template(
                 config_template,
@@ -3498,254 +3719,100 @@ Need to...                          Open this file:
 """)
 
     def show_next_steps(self):
-        """Show next steps after setup."""
+        """Show simplified next steps after setup."""
         print("\n" + "=" * 50)
         print("✅ Project Setup Complete!")
         print("=" * 50)
-        
+
         print(f"\n📁 Project created in: {self.project_dir}")
         print(f"📋 Template factory kept at: {Path(__file__).parent}")
+        print("\n💡 The BuildTemplate folder stays intact for creating more projects!")
 
-        print("\n🚀 Next Steps:")
+        print("\n" + "=" * 50)
+        print("🚀 Continue Your Setup")
+        print("=" * 50)
+
         print(f"""
+📍 Next Steps:
+
 1. Navigate to your new project:
    cd {self.project_dir}
 
-2. Create Python environment (auto-activates with .python-version):
-   pyenv virtualenv {self.answers['python_version']} {self.answers['project_name']}
-   cd . # Re-enter directory to activate environment
+2. Choose your path:
 
-3. Install UV for blazing-fast dependency management (optional but recommended):
-   pip install uv
-   # UV is 10-100x faster than pip!
+   🤖 AUTOMATED (Recommended):
+   python3 continue_here.py
 
-4. Install dependencies:
-   make install-uv  # Install uv package manager
-   make install     # Install all dependencies (will use uv if available)
+   📖 MANUAL:
+   Open and follow: NEXT_STEPS.md
 
-5. Setup Django project:
-   django-admin startproject config .
-   python manage.py startapp core
-   mv core apps/
+The continuation script will:
+  ✓ Create Python environment
+  ✓ Install dependencies
+  ✓ Set up Django
+  ✓ Initialize git repository
+  ✓ Run migrations
 
-6. Configure Django settings:
-   - Move settings.py to config/settings/base.py
-   - Create development.py and production.py
-   - Update INSTALLED_APPS to include 'apps.core'
+📚 All detailed documentation is in the docs/ folder.
+🎨 Your theme colors: {self.answers['primary_color']}, {self.answers['secondary_color']}, {self.answers['accent_color']}
 
-7. Initial setup (runs migrations, installs pre-commit hooks):
-   make setup  # One command does it all!
-
-8. Start development:
-   make run  # Equivalent to python manage.py runserver
-
-9. Code quality automation:
-   make format      # Auto-format with ruff
-   make lint        # Check code quality
-   make type-check  # Type checking with mypy
-   make security    # Security scan with bandit
-   make quality     # Run all checks
-
-10. Initialize git and push:
-    git add .
-    git commit -m "Initial project setup"
-    git remote add origin git@github.com:username/{self.answers['project_name']}.git
-    git push -u origin main
-
-11. Enable GitHub Actions:
-    - CI workflow runs automatically on push/PR
-    - CodeQL security scanning
-    - Dependency review on PRs
-
-12. Production deployment:
-    # On server: validate before deploying
-    python validate_deployment.py  # Check ports, networks, credentials
-    make deploy  # Uses build.sh script with backup
-
-13. Validate setup:
-    python validate_setup.py  # Verify development setup works
+Happy coding! 🎉
 """)
-        
-        self._show_documentation_summary()
-        
-        print("\n🎨 Theme:")
-        print(f"  - Primary: {self.answers['primary_color']}")
-        print(f"  - Secondary: {self.answers['secondary_color']}")
-        print(f"  - CSS generated in: static/css/base.css")
-        
-        print("\nHappy coding! 🎉")
     
     def generate_summary_file(self):
         """Generate a comprehensive project summary for AI assistants."""
         print("\n📝 Generating project summary...")
-        
-        summary_content = f"""# {self.answers['project_name'].upper()} - Project Setup Summary
 
-**Generated on**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        # Get the directory where this script is located
+        script_dir = Path(__file__).parent
 
-## 🎯 Project Overview
+        # Read template
+        template_path = script_dir / "templates" / "PROJECT_SETUP_SUMMARY.md"
+        summary_template = template_path.read_text()
 
-**Name**: {self.answers['project_name']}  
-**Description**: {self.answers['project_description']}  
-**Domain**: {self.answers['domain']}  
-**Target Users**: {self.answers['target_users']}  
-**Python Version**: {self.answers['python_version']}
+        # Build features list
+        features = []
+        features.append(f"- {'✅' if self.answers['use_celery'] else '❌'} Celery (Background Tasks)")
+        features.append(f"- {'✅' if self.answers['use_redis'] else '❌'} Redis (Caching)")
+        features.append(f"- {'✅' if self.answers['use_api'] else '❌'} REST API")
+        features.append(f"- {'✅' if self.answers['use_sentry'] else '❌'} Sentry Error Tracking")
 
-## 🎨 Design & Theme
+        # Build remote server info
+        remote_server_info = ""
+        if self.answers.get('remote_server'):
+            remote_server_info = f"- Server: {self.answers.get('remote_server', 'N/A')}\n"
+            remote_server_info += f"- Directory: {self.answers.get('remote_backup_dir', 'N/A')}"
 
-**Primary Color**: {self.answers['primary_color']}  
-**Secondary Color**: {self.answers['secondary_color']}  
-**Accent Color**: {self.answers['accent_color']}  
-**Design Style**: {self.answers['design_style'].title()}  
-**Border Radius**: {self.answers['border_radius']}  
-**Shadow Style**: {self.answers['shadow_style'].title()}
-**Dark Mode**: {'Enabled' if self.answers['dark_mode'] else 'Disabled'}
-**Mobile Navigation**: {self.answers['mobile_nav'].replace('-', ' ').title()}
-**Share Image**: {'Provided ✓' if self.answers.get('share_image_path') else 'Not provided - add later'}
+        # Replace placeholders
+        replacements = {
+            '{project_name_upper}': self.answers['project_name'].upper(),
+            '{generated_date}': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            '{project_name}': self.answers['project_name'],
+            '{project_description}': self.answers['project_description'],
+            '{domain}': self.answers['domain'],
+            '{target_users}': self.answers['target_users'],
+            '{python_version}': self.answers['python_version'],
+            '{primary_color}': self.answers['primary_color'],
+            '{secondary_color}': self.answers['secondary_color'],
+            '{accent_color}': self.answers['accent_color'],
+            '{design_style}': self.answers['design_style'].title(),
+            '{border_radius}': self.answers['border_radius'],
+            '{shadow_style}': self.answers['shadow_style'].title(),
+            '{dark_mode}': 'Enabled' if self.answers['dark_mode'] else 'Disabled',
+            '{mobile_nav}': self.answers['mobile_nav'].replace('-', ' ').title(),
+            '{share_image}': 'Provided ✓' if self.answers.get('share_image_path') else 'Not provided - add later',
+            '{dev_database}': self.answers['dev_database'].upper(),
+            '{features_list}': '\n'.join(features),
+            '{remote_backup}': 'Configured' if self.answers.get('remote_server') else 'Not configured',
+            '{remote_server_info}': remote_server_info,
+            '{compliance_reqs}': self.answers.get('compliance_reqs', 'Standard web application requirements'),
+            '{special_features}': self.answers.get('special_features', 'Standard Django features'),
+        }
 
-## ⚙️ Technical Configuration
+        summary_content = summary_template
+        for placeholder, value in replacements.items():
+            summary_content = summary_content.replace(placeholder, value)
 
-**Development Database**: {self.answers['dev_database'].upper()}  
-**Features Enabled**:
-{f"- ✅ Celery (Background Tasks)" if self.answers['use_celery'] else "- ❌ Celery"}
-{f"- ✅ Redis (Caching)" if self.answers['use_redis'] else "- ❌ Redis"}
-{f"- ✅ REST API" if self.answers['use_api'] else "- ❌ REST API"}
-{f"- ✅ Sentry (Error Tracking)" if self.answers['use_sentry'] else "- ❌ Sentry Error Tracking"}
-
-**Remote Backup**: {'Configured' if self.answers.get('remote_server') else 'Not configured'}
-{f"- Server: {self.answers.get('remote_server', 'N/A')}" if self.answers.get('remote_server') else ""}
-{f"- Directory: {self.answers.get('remote_backup_dir', 'N/A')}" if self.answers.get('remote_backup_dir') else ""}
-
-## 🏗️ Architecture Details
-
-**Development Workflow**:
-- Local development with pyenv (no Docker)
-- Hot reload with `python manage.py runserver`
-- {self.answers['dev_database'].upper()} database for development
-
-**Production Stack**:
-- Docker Compose orchestration
-- PostgreSQL database
-- Nginx web server with security headers
-- Gunicorn WSGI server
-- Automated build/deploy via build.sh
-
-**CSS Architecture**:
-- Custom component system (NO Bootstrap/Tailwind)
-- Mobile-first responsive design
-- CSS variables for consistent theming
-- Component-based organization in static/css/components/
-
-## 📁 Generated Project Structure
-
-```
-{self.answers['project_name']}/
-├── CLAUDE.md                    # Project memory (IMPORTANT for AI context)
-├── build.sh                     # Production deployment automation
-├── Makefile                     # Development commands (make help)
-├── .python-version              # Auto pyenv activation
-├── .pre-commit-config.yaml      # Code quality automation
-├── README.md                    # Project overview
-│
-├── apps/                        # Django applications
-│   └── core/                   # Base functionality
-├── config/                      # Django settings
-│   └── settings/               # Environment-specific settings
-├── static/                      # Static assets
-│   ├── css/                    # Custom CSS framework
-│   │   ├── base.css            # Generated theme with your colors
-│   │   └── components/         # Reusable components (buttons, forms, etc.)
-│   ├── img/                    # Images
-│   │   └── default-share.*     # Default share image (PWA/OG)
-│   ├── js/                     # JavaScript
-│   │   └── service-worker.js   # PWA service worker
-│   └── manifest.json           # PWA manifest
-├── templates/                   # Django templates
-├── docs/                       # Comprehensive documentation
-│   ├── SETUP_GUIDE.md         # Complete setup instructions
-│   ├── BEGINNERS_GUIDE.md     # Tutorial for new developers
-│   ├── STYLE_GUIDE.md         # Custom styling guidelines
-│   ├── CODING_GUIDE.md        # Development standards
-│   ├── FILE_HANDLING.md       # File upload & storage guide
-│   └── PWA_SETUP.md           # PWA & Open Graph configuration
-│
-├── requirements/               # Python dependencies
-├── nginx/                      # Production nginx config
-├── docker-compose.yml          # Production containers
-└── Dockerfile                  # Production image
-```
-
-## 🚀 Key Commands Reference
-
-**Development**:
-```bash
-make run          # Start development server
-make test         # Run tests
-make shell        # Django shell
-make migrate      # Database migrations
-make format       # Auto-format code
-make lint         # Check code quality
-```
-
-**Production**:
-```bash
-make deploy       # Deploy with backup
-make backup       # Backup database
-./build.sh -r -d $(date +%Y%m%d)  # Full rebuild
-```
-
-## 🎯 Domain-Specific Context
-
-**Industry**: {self.answers['domain']}  
-**Compliance Requirements**: {self.answers.get('compliance_reqs', 'Standard web application requirements')}  
-**Special Features**: {self.answers.get('special_features', 'Standard Django features')}
-
-## 📋 Next Development Tasks
-
-1. **Django Setup**:
-   - Move settings.py to config/settings/ structure
-   - Create base, development, and production settings
-   - Add 'apps.core' to INSTALLED_APPS
-
-2. **Model Development**:
-   - Define domain models in apps/core/models.py
-   - Create migrations and migrate
-   - Set up admin interface
-
-3. **Frontend**:
-   - Custom CSS components are ready in static/css/
-   - Mobile-first templates in templates/
-   - No Bootstrap/Tailwind - use custom system
-
-4. **Quality Setup**:
-   - Pre-commit hooks configured
-   - Code formatting with black/isort
-   - Linting with flake8
-
-## 🤖 AI Assistant Instructions
-
-When helping with this project:
-
-1. **NEVER suggest Bootstrap/Tailwind** - We have a complete custom CSS system
-2. **Always think mobile-first** - Every component starts with mobile design
-3. **Use the custom CSS variables** - Primary: {self.answers['primary_color']}, etc.
-4. **Follow the build.sh pattern** - Production deployment via Docker
-5. **Reference CLAUDE.md** - Contains living project context
-6. **Domain focus**: This is a {self.answers['domain']} application for {self.answers['target_users']}
-
-## 🔧 Quick Context for Development
-
-**Current Status**: Fresh project setup completed  
-**Ready for**: Django project creation and initial model development  
-**Architecture**: Same proven patterns as Keep-Logging project  
-**Styling**: Custom {self.answers['design_style']} theme with {self.answers['primary_color']} primary color  
-**Deployment**: Docker production, pyenv development
-
----
-
-*This summary provides complete context for AI assistants and developers joining the project.*
-"""
-        
         # Write summary file
         (self.project_dir / "PROJECT_SETUP_SUMMARY.md").write_text(summary_content)
         print("✅ Project summary generated: PROJECT_SETUP_SUMMARY.md")
@@ -3840,29 +3907,72 @@ Once you've added these URLs to `config/urls.py`, you can delete this reminder f
         (self.project_dir / "CONFIGURE_URLS.md").write_text(url_reminder)
         print("📋 URL configuration reminder created: CONFIGURE_URLS.md")
 
+    def generate_continue_files(self):
+        """Generate continue_here.py and NEXT_STEPS.md in the new project."""
+        print("\n📝 Generating continuation files...")
+
+        # Get the directory where this script is located (BuildTemplate)
+        template_dir = Path(__file__).parent / "templates"
+
+        # Read templates
+        next_steps_template = (template_dir / "NEXT_STEPS.md").read_text()
+        continue_py_template = (template_dir / "continue_here.py").read_text()
+
+        # Replace placeholders
+        replacements = {
+            '{project_name}': self.answers['project_name'],
+            '{python_version}': self.answers['python_version'],
+            '{primary_color}': self.answers['primary_color'],
+            '{secondary_color}': self.answers['secondary_color'],
+            '{accent_color}': self.answers['accent_color'],
+            '{design_style}': self.answers['design_style'],
+        }
+
+        for placeholder, value in replacements.items():
+            next_steps_template = next_steps_template.replace(placeholder, value)
+            continue_py_template = continue_py_template.replace(placeholder, value)
+
+        # Write files to new project directory
+        (self.project_dir / "NEXT_STEPS.md").write_text(next_steps_template)
+        (self.project_dir / "continue_here.py").write_text(continue_py_template)
+
+        # Make Python script executable
+        import stat
+        continue_py_path = self.project_dir / "continue_here.py"
+        continue_py_path.chmod(continue_py_path.stat().st_mode | stat.S_IEXEC)
+
+        print("  ✅ Created NEXT_STEPS.md")
+        print("  ✅ Created continue_here.py (executable)")
+
     def offer_open_vscode(self):
         """Offer to open the new project in VSCode."""
         print("\n" + "=" * 50)
-        print("🎉 Project Created Successfully!")
+        print("🎉 Opening Your Project")
         print("=" * 50)
-        print(f"\n📁 Project location: {self.project_dir}")
-        print(f"📋 Template factory: {Path(__file__).parent}")
-        print("\n💡 The BuildTemplate folder stays intact for creating more projects!")
 
         if input("\n🚀 Open project in new VSCode window? (Y/n): ").lower() != 'n':
             import subprocess
             try:
                 subprocess.run(['code', str(self.project_dir)], check=True)
                 print("\n✅ Opening VSCode...")
+                print(f"\n📍 Once VSCode opens, you'll be in: {self.project_dir}")
+                print("🚀 Run this in the VSCode terminal: python3 continue_here.py")
             except subprocess.CalledProcessError:
-                print("\n❌ Could not open VSCode. You can open it manually:")
-                print(f"   code {self.project_dir}")
+                print("\n❌ Could not open VSCode")
+                print(f"📂 Manually: cd {self.project_dir}")
+                print("🚀 Then run: python3 continue_here.py")
             except FileNotFoundError:
-                print("\n⚠️  VSCode 'code' command not found. Open manually:")
-                print(f"   File → Open Folder → {self.project_dir}")
+                print("\n⚠️  VSCode 'code' command not found.")
+                print("\n📋 To fix this (takes 30 seconds):")
+                print("   1. Open VSCode")
+                print("   2. Press Cmd + Shift + P")
+                print("   3. Type: 'shell command'")
+                print("   4. Click: 'Shell Command: Install code command in PATH'")
+                print(f"\n📂 For now, manually open: {self.project_dir}")
+                print("🚀 Then run: python3 continue_here.py")
         else:
-            print(f"\n💡 To open later, run:")
-            print(f"   code {self.project_dir}")
+            print(f"\n📂 Next: cd {self.project_dir}")
+            print("🚀 Then: python3 continue_here.py")
 
 
 def main():

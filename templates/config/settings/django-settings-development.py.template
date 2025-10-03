@@ -7,13 +7,16 @@ from .base import *
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# Database
+# Development hosts
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '*']
+
+# Database - always use sqlite for development unless explicitly configured
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
-} if '{{DEV_DATABASE}}' == 'sqlite' else DATABASES
+}
 
 # Development-only apps
 INSTALLED_APPS += [

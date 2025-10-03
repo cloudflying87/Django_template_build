@@ -18,6 +18,31 @@ This template stays **permanently** in one location and creates new projects as 
 
 **Key concept**: The wizard creates your new project in the **parent directory** so BuildTemplate remains untouched for future use.
 
+## 📋 Prerequisites
+
+Before running the wizard, make sure you have:
+
+- ✅ **Python 3.11+** installed (via pyenv recommended)
+- ✅ **Git** installed
+- ✅ **VSCode** installed
+- ✅ **VSCode `code` command** enabled (for auto-open feature)
+
+**Quick test:**
+```bash
+python3 --version  # Should show 3.11 or higher
+git --version
+code --version     # If this fails, see setup instructions below
+```
+
+**If `code` command not found:**
+1. Open VSCode
+2. Press `Cmd + Shift + P`
+3. Type "shell command"
+4. Click "Shell Command: Install 'code' command in PATH"
+5. Done! ✅
+
+📖 **New to this?** See `COMPLETE_BEGINNERS_GUIDE.md` for step-by-step installation instructions.
+
 ## 📋 Quick Start
 
 ### Step 1: Run the Wizard (2 minutes)
