@@ -21,6 +21,7 @@ class ContinueSetup:
         self.project_dir = Path.cwd()
         self.project_name = "{project_name}"
         self.python_version = "{python_version}"
+        self.venv_python = None  # Will be set after creating virtualenv
 
     def print_header(self, text):
         """Print a formatted header."""
@@ -34,7 +35,7 @@ class ContinueSetup:
         print(f"📍 Step {number}: {text}")
         print('─' * 60)
 
-    def run_command(self, cmd, description, check=True, shell=False, show_output=True):
+    def run_command(self, cmd, description, check=True, shell=False, show_output=True, env=None):
         """Run a command and handle errors."""
         print(f"\n▶ {description}")
         print(f"  Command: {cmd if isinstance(cmd, str) else ' '.join(cmd)}")
@@ -43,9 +44,9 @@ class ContinueSetup:
             if show_output:
                 # Don't capture output - show it in real-time
                 if shell:
-                    result = subprocess.run(cmd, shell=True, check=check)
+                    result = subprocess.run(cmd, shell=True, check=check, env=env)
                 else:
-                    result = subprocess.run(cmd, check=check)
+                    result = subprocess.run(cmd, check=check, env=env)
 
                 if result.returncode == 0:
                     print("✅ Success")
@@ -53,9 +54,9 @@ class ContinueSetup:
             else:
                 # Capture output (for quick commands)
                 if shell:
-                    result = subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
+                    result = subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True, env=env)
                 else:
-                    result = subprocess.run(cmd, check=check, capture_output=True, text=True)
+                    result = subprocess.run(cmd, check=check, capture_output=True, text=True, env=env)
 
                 if result.stdout:
                     print(result.stdout)
@@ -206,9 +207,9 @@ from django.shortcuts import render
 
 def home(request):
     """Homepage view."""
-    context = {
+    context = {{
         'project_name': '{project_name}',
-    }
+    }}
     return render(request, 'core/home.html', context)
 '''
         (core_dir / "views.py").write_text(views_content.format(project_name=self.project_name))
@@ -363,6 +364,10 @@ def home(request):
 
         if self.project_name in result.stdout:
             print(f"✅ Environment '{self.project_name}' already exists")
+            # Set the virtualenv Python path
+            pyenv_root = Path.home() / ".pyenv" / "versions" / self.project_name / "bin" / "python"
+            if pyenv_root.exists():
+                self.venv_python = str(pyenv_root)
             return True
 
         # Create environment
@@ -373,15 +378,25 @@ def home(request):
         )
 
         if success:
-            print(f"\n✅ Environment created!")
-            print(f"   It will auto-activate when you cd into this directory")
-            print(f"   (thanks to .python-version file)")
+            # Set the virtualenv Python path
+            pyenv_root = Path.home() / ".pyenv" / "versions" / self.project_name / "bin" / "python"
+            if pyenv_root.exists():
+                self.venv_python = str(pyenv_root)
+                print(f"\n✅ Environment created!")
+                print(f"   Using: {self.venv_python}")
+            else:
+                print(f"\n✅ Environment created!")
+                print(f"   It will auto-activate when you cd into this directory")
+                print(f"   (thanks to .python-version file)")
 
         return success
 
     def install_uv(self):
         """Install UV package manager."""
         self.print_step(2, "Installing UV Package Manager (Optional)")
+
+        # Use virtualenv Python if available, otherwise system Python
+        python_cmd = self.venv_python or sys.executable
 
         # Check if already installed
         try:
@@ -394,7 +409,7 @@ def home(request):
         print("UV is 10-100x faster than pip!")
         if input("Install UV? (Y/n): ").lower() != 'n':
             return self.run_command(
-                [sys.executable, '-m', 'pip', 'install', 'uv'],
+                [python_cmd, '-m', 'pip', 'install', 'uv'],
                 "Installing UV via pip",
                 check=False
             )
@@ -408,26 +423,40 @@ def home(request):
 
         print("\n⏱️  This may take a few minutes on first run...")
 
+        # Use virtualenv Python if available
+        python_cmd = self.venv_python or sys.executable
+
         makefile = self.project_dir / "Makefile"
         if not makefile.exists():
             print("⚠️  Makefile not found. Installing manually...")
             return self.run_command(
-                [sys.executable, '-m', 'pip', 'install', '-r', 'requirements/development.txt'],
+                [python_cmd, '-m', 'pip', 'install', '-r', 'requirements/development.txt'],
                 "Installing dependencies with pip",
                 check=False
             )
 
-        # Try using make commands
+        # Set up environment to use virtualenv
+        import os
+        env = os.environ.copy()
+        if self.venv_python:
+            venv_bin = str(Path(self.venv_python).parent)
+            env['PATH'] = f"{venv_bin}:{env.get('PATH', '')}"
+            env['VIRTUAL_ENV'] = str(Path(self.venv_python).parent.parent)
+            print(f"   Using virtualenv: {env['VIRTUAL_ENV']}")
+
+        # Try using make commands with virtualenv activated
         self.run_command(
             ['make', 'install-uv'],
             "Installing UV via Makefile",
-            check=False
+            check=False,
+            env=env if self.venv_python else None
         )
 
         return self.run_command(
             ['make', 'install'],
             "Installing all dependencies",
-            check=False
+            check=False,
+            env=env if self.venv_python else None
         )
 
     def setup_django(self):
@@ -472,16 +501,19 @@ def home(request):
 
         # Automatic setup
         try:
+            # Use virtualenv Python if available
+            python_cmd = self.venv_python or 'python'
+
             # Create Django project
             self.run_command(
-                ['django-admin', 'startproject', 'config', '.'],
+                [python_cmd, '-m', 'django', 'startproject', 'config', '.'],
                 "Creating Django project structure",
                 check=True
             )
 
             # Create core app
             self.run_command(
-                ['python', 'manage.py', 'startapp', 'core'],
+                [python_cmd, 'manage.py', 'startapp', 'core'],
                 "Creating core app",
                 check=True
             )
@@ -520,18 +552,31 @@ def home(request):
         """Run initial Django setup commands."""
         self.print_step(5, "Running Initial Setup")
 
+        # Use virtualenv Python if available
+        python_cmd = self.venv_python or 'python'
+
+        # Set up environment to use virtualenv
+        import os
+        env = None
+        if self.venv_python:
+            env = os.environ.copy()
+            venv_bin = str(Path(self.venv_python).parent)
+            env['PATH'] = f"{venv_bin}:{env.get('PATH', '')}"
+            env['VIRTUAL_ENV'] = str(Path(self.venv_python).parent.parent)
+
         makefile = self.project_dir / "Makefile"
         if makefile.exists():
             return self.run_command(
                 ['make', 'setup'],
                 "Running make setup (migrations, pre-commit hooks, etc.)",
-                check=False
+                check=False,
+                env=env
             )
         else:
             # Manual setup
             print("Running migrations...")
             self.run_command(
-                ['python', 'manage.py', 'migrate'],
+                [python_cmd, 'manage.py', 'migrate'],
                 "Applying database migrations",
                 check=False
             )
