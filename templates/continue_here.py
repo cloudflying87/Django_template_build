@@ -227,13 +227,13 @@ def home(request):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ project_name }} - Ready!</title>
     <style>
-        * {{
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }}
+        }
 
-        body {{
+        body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             display: flex;
             align-items: center;
@@ -242,56 +242,56 @@ def home(request):
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 20px;
-        }}
+        }
 
-        .container {{
+        .container {
             text-align: center;
             max-width: 600px;
-        }}
+        }
 
-        h1 {{
+        h1 {
             font-size: 3rem;
             margin-bottom: 1rem;
             animation: fadeInUp 0.6s ease-out;
-        }}
+        }
 
-        .emoji {{
+        .emoji {
             font-size: 5rem;
             margin-bottom: 2rem;
             animation: bounce 1s ease-in-out infinite;
-        }}
+        }
 
-        p {{
+        p {
             font-size: 1.5rem;
             margin-bottom: 2rem;
             opacity: 0.95;
             animation: fadeInUp 0.6s ease-out 0.2s both;
-        }}
+        }
 
-        .info {{
+        .info {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
             border-radius: 12px;
             padding: 2rem;
             margin-top: 2rem;
             animation: fadeInUp 0.6s ease-out 0.4s both;
-        }}
+        }
 
-        .info h2 {{
+        .info h2 {
             font-size: 1.2rem;
             margin-bottom: 1rem;
             opacity: 0.9;
-        }}
+        }
 
-        .links {{
+        .links {
             display: flex;
             gap: 1rem;
             justify-content: center;
             flex-wrap: wrap;
             margin-top: 1.5rem;
-        }}
+        }
 
-        .links a {{
+        .links a {
             color: white;
             background: rgba(255, 255, 255, 0.2);
             padding: 0.75rem 1.5rem;
@@ -299,28 +299,28 @@ def home(request):
             text-decoration: none;
             transition: all 0.3s ease;
             border: 1px solid rgba(255, 255, 255, 0.3);
-        }}
+        }
 
-        .links a:hover {{
+        .links a:hover {
             background: rgba(255, 255, 255, 0.3);
             transform: translateY(-2px);
-        }}
+        }
 
-        @keyframes fadeInUp {{
-            from {{
+        @keyframes fadeInUp {
+            from {
                 opacity: 0;
                 transform: translateY(20px);
-            }}
-            to {{
+            }
+            to {
                 opacity: 1;
                 transform: translateY(0);
-            }}
-        }}
+            }
+        }
 
-        @keyframes bounce {{
-            0%, 100% {{ transform: translateY(0); }}
-            50% {{ transform: translateY(-20px); }}
-        }}
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
     </style>
 </head>
 <body>
