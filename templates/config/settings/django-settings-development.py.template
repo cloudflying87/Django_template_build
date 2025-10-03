@@ -21,15 +21,19 @@ DATABASES = {
 # Development-only apps
 INSTALLED_APPS += [
     'django_extensions',
-    'django_browser_reload',
 ]
 
 # Development middleware
 if DEBUG:
-    # Browser reload middleware (auto-refresh on code changes)
-    MIDDLEWARE = ['django_browser_reload.middleware.BrowserReloadMiddleware'] + MIDDLEWARE
+    # Browser reload (only if installed)
+    try:
+        import django_browser_reload
+        INSTALLED_APPS += ['django_browser_reload']
+        MIDDLEWARE = ['django_browser_reload.middleware.BrowserReloadMiddleware'] + MIDDLEWARE
+    except ImportError:
+        pass
 
-    # Debug toolbar
+    # Debug toolbar (only if installed)
     try:
         import debug_toolbar
         INSTALLED_APPS += ['debug_toolbar']
