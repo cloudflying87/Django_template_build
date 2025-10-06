@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 WORKDIR /build
-COPY requirements/production.txt requirements.txt
+COPY requirements/ requirements/
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements/production.txt
 
 # Production stage
 FROM python:{{PYTHON_VERSION}}-slim
@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean
 
 # Copy Python packages from builder stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/lib/python{{PYTHON_MAJOR_MINOR}}/site-packages /usr/local/lib/python{{PYTHON_MAJOR_MINOR}}/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Create app directory with proper structure

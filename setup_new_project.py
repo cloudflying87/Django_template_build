@@ -3578,13 +3578,18 @@ cloudflared/*.pem
         if not source.exists():
             print(f"⚠️  Warning: Template {source.name} not found, skipping...")
             return
-            
+
         content = source.read_text()
-        
+
+        # Extract major.minor version (e.g., "3.13" from "3.13.1")
+        python_version = self.answers['python_version']
+        python_major_minor = '.'.join(python_version.split('.')[:2])
+
         # Replace placeholders
         replacements = {
             "{{PROJECT_NAME}}": self.answers['project_name'],
-            "{{PYTHON_VERSION}}": self.answers['python_version'],
+            "{{PYTHON_VERSION}}": python_version,
+            "{{PYTHON_MAJOR_MINOR}}": python_major_minor,
             "{{DOMAIN_NAME}}": self.answers.get('domain_name', 'example.com'),
             "{{TUNNEL_ID}}": "your-tunnel-id-here",
         }
@@ -3831,8 +3836,8 @@ WORKDIR /app
 RUN mkdir -p /app/staticfiles /app/media
 
 # Install Python dependencies
-COPY requirements/production.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
+COPY requirements/ /app/requirements/
+RUN pip install --upgrade pip && pip install -r requirements/production.txt
 
 # Copy project files
 COPY --chown=app:app . /app/
