@@ -7,7 +7,7 @@ services:
     env_file:
       - ./.env
     ports:
-      - "5440:5432"  # External port to avoid conflicts
+      - "${DB_PORT_EXTERNAL}:5432"  # External port (unique per project)
     networks:
       - app_network
     environment:
@@ -180,4 +180,4 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: ${DOCKER_SUBNET}

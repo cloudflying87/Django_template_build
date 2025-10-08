@@ -2820,7 +2820,16 @@ a:hover {
             chars = string.ascii_letters + string.digits
             return ''.join(secrets.choice(chars) for _ in range(32))
 
-        env_content = f"""# Django Settings
+        # Generate unique Docker subnet and port based on project name to avoid conflicts
+        project_hash = hash(self.answers['project_name']) % 16 + 16
+        docker_subnet = f"172.{project_hash}.0.0/16"
+        db_port_external = 5440 + (hash(self.answers['project_name']) % 16)
+
+        env_content = f"""# Project Configuration
+PROJECT_NAME={self.answers['project_name']}
+DOCKER_SUBNET={docker_subnet}  # Unique subnet to avoid Docker network conflicts
+
+# Django Settings
 # SECURITY WARNING: Keep these secret!
 SECRET_KEY={generate_secret_key()}
 DEBUG=True
@@ -2832,6 +2841,7 @@ DB_USER={self.answers['project_name_snake']}_user
 DB_PASSWORD={generate_password()}
 DB_HOST=db
 DB_PORT=5432
+DB_PORT_EXTERNAL={db_port_external}  # External port (auto-generated to avoid conflicts)
 
 # Email Configuration
 # Development: Prints to console
@@ -3464,7 +3474,15 @@ pre-commit>=3.8.0
         (self.project_dir / "requirements" / "production.txt").write_text("-r base.txt\n")
         
         # Create .env.example
-        env_example = f"""# Django Settings
+        project_hash = hash(self.answers['project_name']) % 16 + 16
+        example_subnet = f"172.{project_hash}.0.0/16"
+        example_port = 5440 + (hash(self.answers['project_name']) % 16)
+
+        env_example = f"""# Project Configuration
+PROJECT_NAME={self.answers['project_name']}
+DOCKER_SUBNET={example_subnet}  # Unique subnet to avoid Docker network conflicts
+
+# Django Settings
 SECRET_KEY=your-secret-key-here
 DEBUG=False
 ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com
@@ -3475,6 +3493,7 @@ DB_USER={self.answers['project_name_snake']}_user
 DB_PASSWORD=secure-password-here
 DB_HOST=db
 DB_PORT=5432
+DB_PORT_EXTERNAL={example_port}  # External port (auto-generated to avoid conflicts)
 """
         
         if self.answers['use_redis']:

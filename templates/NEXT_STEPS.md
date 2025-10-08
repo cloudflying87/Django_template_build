@@ -120,6 +120,25 @@ git remote add origin git@github.com:username/{project_name}.git
 git push -u origin main
 ```
 
+### Docker Commands
+```bash
+# Start Docker services
+sudo docker compose up -d
+
+# Check Docker network subnets (troubleshoot overlaps)
+sudo docker network inspect $(sudo docker network ls -q) | grep Subnet
+
+# Check which ports are in use (troubleshoot port conflicts)
+sudo docker ps --format "table {{{{.Names}}}}\t{{{{.Ports}}}}"
+
+# View logs
+sudo docker compose logs -f
+
+# Rebuild containers
+./build.sh -s  # Soft rebuild (preserves database)
+./build.sh -r -d YYYYMMDD  # Full rebuild with restore
+```
+
 ---
 
 ## 📚 Documentation Guide
