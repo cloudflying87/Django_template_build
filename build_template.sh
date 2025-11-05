@@ -10,7 +10,7 @@
 # PROJECT CONFIGURATION - CHANGE THESE
 PROJECT_NAME="your-project-name"                    # ← CHANGE THIS
 REMOTE_SERVER="your-user@your-server-ip"           # ← CHANGE THIS (optional)
-REMOTE_BACKUP_DIR="/path/to/backups"               # ← CHANGE THIS (optional)
+REMOTE_BACKUP_DIR="/mnt/Storage/Database_Backups/"               # ← CHANGE THIS (optional)
 
 # Auto-generated container names (usually don't need to change)
 DB_CONTAINER="${PROJECT_NAME}-db-1"

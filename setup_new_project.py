@@ -84,6 +84,9 @@ It's excluded from git via .gitignore.
                 self.generate_css()
                 self.create_django_project()
 
+                # Generate base template with SEO features (always)
+                self.generate_base_template_and_seo()
+
                 # Generate auth system if requested (default: yes in quick, optional in advanced)
                 if self.answers.get('include_auth', True):
                     self.generate_auth_system()
@@ -231,6 +234,19 @@ It's excluded from git via .gitignore.
         # Optional: Share image
         self._quick_share_image_prompt()
 
+        # Quick SEO choice (defaults to basic only for simplicity)
+        print("\n🔍 SEO Features")
+        print("-" * 30)
+        print("Basic (default): Open Graph for social previews")
+        print("Full: + Sitemaps, robots.txt, structured data")
+        seo_full = input("Enable full SEO? (y/N): ").lower()
+        self.answers['include_seo'] = seo_full == 'y'
+        self.answers['twitter_handle'] = None  # Skip in quick mode
+        if self.answers['include_seo']:
+            print("  ✓ Full SEO enabled")
+        else:
+            print("  ✓ Basic social sharing enabled")
+
         # Technical defaults (optimized for quick start)
         self.answers['python_version'] = '3.13.1'
         self.answers['dev_database'] = 'sqlite'  # SQLite for simplicity
@@ -277,6 +293,23 @@ It's excluded from git via .gitignore.
         else:
             # Collect auth configuration
             self.collect_authentication_setup()
+
+        # Ask about SEO features
+        print("\n🔍 SEO & Social Sharing")
+        print("-" * 30)
+        print("Basic: Open Graph tags for nice social media previews (recommended for all)")
+        print("Full: + Sitemaps, robots.txt, structured data, meta tags (for public sites)")
+        seo_choice = input("\nEnable full SEO features? (y/N): ").lower()
+        self.answers['include_seo'] = seo_choice == 'y'
+
+        if self.answers['include_seo']:
+            print("  ✓ Full SEO enabled: sitemaps, robots.txt, structured data, advanced meta tags")
+            # Ask for optional Twitter handle
+            twitter = input("  Twitter/X handle for Twitter Cards (optional, @username): ").strip()
+            self.answers['twitter_handle'] = twitter if twitter and twitter.startswith('@') else None
+        else:
+            print("  ✓ Basic social sharing enabled (Open Graph tags for previews)")
+            self.answers['twitter_handle'] = None
 
         # Collect all other answers (existing flow)
         self.collect_style_preferences()
@@ -631,7 +664,18 @@ It's excluded from git via .gitignore.
             print(f"  ✓ REST API")
         if self.answers['use_sentry']:
             print(f"  ✓ Sentry error tracking")
-    
+
+        # SEO section
+        print(f"\nSEO & Social:")
+        if self.answers.get('share_image_path'):
+            print(f"  ✓ Social share image provided")
+        if self.answers.get('include_seo', False):
+            print(f"  ✓ Full SEO: sitemap, robots.txt, structured data")
+            if self.answers.get('twitter_handle'):
+                print(f"  ✓ Twitter Cards: {self.answers['twitter_handle']}")
+        else:
+            print(f"  ✓ Basic: Open Graph tags for social previews")
+
     def confirm_setup(self) -> bool:
         """Confirm the setup configuration."""
         print("\n" + "=" * 50)
@@ -812,12 +856,22 @@ It's excluded from git via .gitignore.
         (self.project_dir / "config" / "__init__.py").touch()
         (settings_dir / "__init__.py").touch()
         
+        # SEO conditional placeholders
+        if self.answers.get('include_seo', False):
+            seo_context_processor = "\n                'apps.core.context_processors.seo_defaults',"
+            seo_sitemap_app = "\n    'django.contrib.sitemaps',  # Sitemap generation"
+        else:
+            seo_context_processor = ""
+            seo_sitemap_app = ""
+
         replacements = {
             "{{PROJECT_NAME}}": self.answers['project_name'],
             "{{PROJECT_NAME_SNAKE}}": self.answers['project_name_snake'],
             "{{DATE}}": datetime.now().strftime("%Y-%m-%d"),
             "{{DEV_DATABASE}}": self.answers['dev_database'],
             "{{DOMAIN_NAME}}": self.answers.get('domain_name', 'example.com'),
+            "{{SEO_CONTEXT_PROCESSOR}}": seo_context_processor,
+            "{{SEO_SITEMAP_APP}}": seo_sitemap_app,
         }
         
         # Process Django settings templates
@@ -1078,13 +1132,20 @@ class CoreConfig(AppConfig):
         """Create the main URL configuration."""
         config_dir = self.project_dir / "config"
 
+        # SEO imports and sitemap dict if enabled
+        seo_imports = ""
+        seo_sitemaps_dict = ""
+        if self.answers.get('include_seo', False):
+            seo_imports = "\nfrom django.contrib.sitemaps.views import sitemap\nfrom apps.core.sitemaps import StaticViewSitemap"
+            seo_sitemaps_dict = "\n\n# Sitemaps\nsitemaps = {\n    'static': StaticViewSitemap,\n}"
+
         urls_content = f'''"""
 URL configuration for {self.answers['project_name']} project.
 """
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-from django.conf.urls.static import static
+from django.conf.urls.static import static{seo_imports}{seo_sitemaps_dict}
 
 urlpatterns = [
     path('', include('apps.core.urls')),  # Homepage and core views
@@ -1098,6 +1159,10 @@ urlpatterns = [
         # (API URLs are included within apps.accounts.urls)
         if self.answers.get('include_auth', True):
             urls_content += "    path('accounts/', include('apps.accounts.urls')),\n"
+
+        # Add SEO URLs if enabled
+        if self.answers.get('include_seo', False):
+            urls_content += "    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='django.contrib.sitemaps.views.sitemap'),\n"
 
         # Close urlpatterns and add static files
         urls_content += ''']
@@ -2893,6 +2958,173 @@ DOMAIN_NAME={self.answers.get('domain_name', 'example.com')}
         (self.project_dir / ".env").write_text(env_content)
         print("  ✅ Generated .env with secure SECRET_KEY and database password")
         print("  ⚠️  IMPORTANT: .env is gitignored - never commit secrets to git!")
+
+    def generate_base_template_and_seo(self):
+        """Generate base.html template with SEO features."""
+        print("\n📄 Generating base template...")
+
+        # Create templates directory at project root
+        templates_dir = self.project_dir / "templates"
+        templates_dir.mkdir(exist_ok=True)
+
+        # Get share image info
+        if self.answers.get('share_image_ext'):
+            share_image = f"/static/img/default-share{self.answers['share_image_ext']}"
+        else:
+            share_image = "/static/img/default-share.jpg"
+
+        # Determine site name and description
+        site_name = self.answers.get('project_name', 'My Site')
+        default_description = self.answers.get('project_description', '')
+
+        # Twitter handle for Twitter Cards
+        twitter_handle = self.answers.get('twitter_handle', '')
+        twitter_card_tag = f'<meta name="twitter:site" content="{twitter_handle}">' if twitter_handle else ''
+
+        # Full SEO or basic?
+        include_seo = self.answers.get('include_seo', False)
+
+        # Generate base.html with conditional SEO features
+        # Note: Using triple quotes to avoid f-string escaping issues
+        base_template = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {%% load static %%}
+
+    {# Core Meta Tags #}
+    <title>{%% block title %%}''' + site_name + '''{%% endblock %%}</title>
+    <meta name="description" content="{%% block description %%}''' + default_description + '''{%% endblock %%}">
+    ''' + ('{% if False %}<!-- SEO disabled -->' if not include_seo else '''<meta name="keywords" content="{%% block keywords %%}{%% endblock %%}">
+    <link rel="canonical" href="{%% block canonical %%}{{ request.build_absolute_uri }}{%% endblock %%}">''') + '''
+
+    {# Open Graph Tags (for Facebook, LinkedIn, etc.) #}
+    <meta property="og:type" content="{%% block og_type %%}website{%% endblock %%}">
+    <meta property="og:title" content="{%% block og_title %%}{%% block title %%}''' + site_name + '''{%% endblock %%}{%% endblock %%}">
+    <meta property="og:description" content="{%% block og_description %%}{%% block description %%}''' + default_description + '''{%% endblock %%}{%% endblock %%}">
+    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:image" content="{%% block og_image %%}{{ request.scheme }}://{{ request.get_host }}''' + share_image + '''{%% endblock %%}">
+    <meta property="og:site_name" content="''' + site_name + '''">
+
+    {# Twitter Card Tags #}
+    <meta name="twitter:card" content="summary_large_image">
+    ''' + (twitter_card_tag if twitter_card_tag else '') + '''
+    <meta name="twitter:title" content="{%% block twitter_title %%}{%% block og_title %%}{%% endblock %%}{%% endblock %%}">
+    <meta name="twitter:description" content="{%% block twitter_description %%}{%% block og_description %%}{%% endblock %%}{%% endblock %%}">
+    <meta name="twitter:image" content="{%% block twitter_image %%}{%% block og_image %%}{%% endblock %%}{%% endblock %%}">
+    ''' + ('''
+    {# Structured Data (JSON-LD) #}
+    {%% block structured_data %%}
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "''' + site_name + '''",
+        "url": "{{ request.scheme }}://{{ request.get_host }}"
+    }
+    </script>
+    {%% endblock %%}''' if include_seo else '') + '''
+
+    {# Favicon and PWA #}
+    <link rel="manifest" href="{%% static 'manifest.json' %%}">
+    <link rel="icon" type="image/x-icon" href="{%% static 'favicon.ico' %%}">
+
+    {# Stylesheets #}
+    {%% block extra_head %%}{%% endblock %%}
+</head>
+<body>
+    {%% block content %%}{%% endblock %%}
+
+    {# Scripts #}
+    {%% block extra_js %%}{%% endblock %%}
+</body>
+</html>'''
+
+        (templates_dir / "base.html").write_text(base_template)
+        print("  ✅ Created base.html with social sharing tags")
+
+        # Generate SEO utility files if full SEO is enabled
+        if include_seo:
+            self._generate_seo_utilities()
+
+    def _generate_seo_utilities(self):
+        """Generate SEO utility files (sitemaps, context processors, etc.)."""
+        print("  📊 Generating SEO utilities...")
+
+        core_dir = self.project_dir / "apps" / "core"
+
+        # 1. Generate sitemaps.py
+        sitemaps_content = '''from django.contrib.sitemaps import Sitemap
+from django.urls import reverse
+
+
+class StaticViewSitemap(Sitemap):
+    """Sitemap for static pages."""
+    priority = 0.8
+    changefreq = 'weekly'
+
+    def items(self):
+        # Add your static page URL names here
+        return ['home']
+
+    def location(self, item):
+        return reverse(item)
+'''
+        (core_dir / "sitemaps.py").write_text(sitemaps_content)
+        print("    ✅ Created sitemaps.py")
+
+        # 2. Generate SEO context processor
+        context_processors_content = f'''def seo_defaults(request):
+    """Provide default SEO values to all templates."""
+    return {{{{
+        'site_name': '{self.answers.get('project_name', 'My Site')}',
+        'default_description': '{self.answers.get('project_description', '')}',
+        'default_image': request.build_absolute_uri('/static/img/default-share.jpg'),
+    }}}}
+'''
+        (core_dir / "context_processors.py").write_text(context_processors_content)
+        print("    ✅ Created context_processors.py")
+
+        # 3. Add robots.txt view to core/views.py
+        views_path = core_dir / "views.py"
+        if views_path.exists():
+            existing_views = views_path.read_text()
+            # Add robots view if not already there
+            if 'def robots_txt' not in existing_views:
+                robots_view = f'''
+
+def robots_txt(request):
+    """Serve robots.txt dynamically."""
+    from django.http import HttpResponse
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "",
+        "# Sitemap",
+        "Sitemap: https://{self.answers.get('domain', 'example.com')}/sitemap.xml",
+    ]
+    return HttpResponse("\\n".join(lines), content_type="text/plain")
+'''
+                views_path.write_text(existing_views + robots_view)
+                print("    ✅ Added robots.txt view to core/views.py")
+
+        # 4. Add robots.txt route to core/urls.py
+        urls_path = core_dir / "urls.py"
+        if urls_path.exists():
+            existing_urls = urls_path.read_text()
+            # Add robots route if not already there
+            if 'robots.txt' not in existing_urls:
+                # Insert before the closing bracket
+                updated_urls = existing_urls.replace(
+                    "urlpatterns = [",
+                    "urlpatterns = [\n    path('robots.txt', views.robots_txt, name='robots'),",
+                )
+                urls_path.write_text(updated_urls)
+                print("    ✅ Added robots.txt route to core/urls.py")
+
+        print("  ✅ SEO utilities generated")
 
     def generate_auth_system(self):
         """Generate complete authentication system (custom User + hybrid auth)."""
